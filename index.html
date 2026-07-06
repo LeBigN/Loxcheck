@@ -87,7 +87,7 @@ section.card p.hint{font-size:12px; color:var(--sub); margin:0 0 12px;}
 
 .field{margin-bottom:12px;}
 .field label{display:block; font-size:12.5px; font-weight:600; color:var(--sub); margin-bottom:4px;}
-.field input[type=text], .field input[type=date], .field input[type=number], .field textarea, .field select{
+.field input[type=text], .field input[type=email], .field input[type=tel], .field input[type=date], .field input[type=number], .field textarea, .field select{
   width:100%; min-width:0; max-width:100%; border:1px solid var(--line); border-radius:9px; padding:10px 11px;
   font-size:15px; font-family:inherit; background:#fff; color:var(--ink);
   -webkit-appearance:none; appearance:none;
@@ -210,6 +210,7 @@ footer.legal-footer{
 .devis-row .d-desc{flex:1 1 0; min-width:0; font-size:13px; line-height:1.3; padding:2px 2px; overflow-wrap:anywhere;}
 .devis-row .d-qty{flex:0 0 56px; border:1px solid var(--line); border-radius:9px; padding:9px 4px; font-size:14px; text-align:center;}
 .devis-row .d-mt{flex:0 0 74px; text-align:right; font-weight:700; font-size:13.5px;}
+.devis-legende{font-size:11.5px; color:var(--sub); margin:10px 0 4px; line-height:1.5;}
 .devis-row .d-km{flex:0 0 74px; border:1px solid var(--line); border-radius:9px; padding:9px 4px; font-size:14px; text-align:center;}
 .devis-row .d-del-spacer{flex:0 0 34px;}
 .devis-dep .d-desc{font-weight:700;}
@@ -362,7 +363,7 @@ const CHECKLIST_SECTIONS = [
 const MOBILIER_ITEMS = ['Table(s)','Chaise(s)','Chaise(s) tissu','Armoire(s) vestiaire','Banc(s)','Armoire(s) bureau','Caisson(s)'];
 
 const state = {
-  meta:{ type:'reception', numAff:'', date:'', client:'', chantier:'', refCommande:'', nbModules:'', conducteur:'', sousTraitant:'', representant:'', civilite:'', tel:'' },
+  meta:{ type:'reception', numAff:'', date:'', client:'', chantier:'', refCommande:'', nbModules:'', conducteur:'', sousTraitant:'', representant:'', civilite:'', email:'', tel:'' },
   checklist:{},
   cles:{ remises:'', rendues:'' },
   mobilier:{},
@@ -370,7 +371,7 @@ const state = {
   acceptation:{ maitreOuvrage:'', delaiJours:'' },
   reserves:{ lignes:['','',''] },
   notice:{ statut:'' }, // 'remise' | 'non_concerne'
-  devis:{ numero:'', date:'', descriptif:'', lignes:[], km:'' }, // lignes: {desc, qty, pu} — refacturation HT
+  devis:{ numero:'', date:'', descriptif:'Refacturation pour dommages constat\u00e9s lors de la restitution des modules', lignes:[], km:'', email:'' }, // lignes: {desc, qty, pu} — refacturation HT
   signatures:{
     receptionLoxam:{ nom:'', date:'', sig:'', entreprise:'' }, receptionClient:{ nom:'', date:'', sig:'', entreprise:'' },
     leveeLoxam:{ nom:'', date:'', sig:'', entreprise:'' }, leveeClient:{ nom:'', date:'', sig:'', entreprise:'' }
@@ -410,6 +411,9 @@ async function loadDraft(){
       if(!Array.isArray(state.devis.lignes)) state.devis.lignes = [];
       if(state.devis.km===undefined || state.devis.km===null) state.devis.km='';
       if(state.meta.civilite===undefined) state.meta.civilite='';
+      if(state.meta.email===undefined) state.meta.email='';
+      if(state.devis.email===undefined) state.devis.email = state.meta.email || '';
+      if(!state.devis.descriptif) state.devis.descriptif = 'Refacturation pour dommages constat\u00e9s lors de la restitution des modules';
       // Migrate old drafts: single `status` string -> `statuses` array
       const migrate = (store)=>{ Object.values(store).forEach(it=>{
         if(!Array.isArray(it.statuses)) it.statuses = it.status ? [it.status] : [];
@@ -570,11 +574,28 @@ function devisAutorise(){
   // et réservée aux conducteurs de travaux
   return state.meta.type === 'sortant' && CONDUCTEURS.includes(state.meta.conducteur);
 }
+function todayISO(){ const d=new Date(), p=(n)=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function applyDatesParDefaut(){
+  // Date du jour partout par défaut, modifiable ensuite
+  const t = todayISO();
+  if(!state.meta.date) state.meta.date = t;
+  // Réception uniquement — les dates de Levée de réserves restent au choix
+  ['receptionLoxam','receptionClient'].forEach(k=>{
+    if(state.signatures[k] && !state.signatures[k].date) state.signatures[k].date = state.meta.date;
+  });
+  if(!state.devis.date) state.devis.date = t;
+}
 function syncDateFiche(v){
   // La date de la fiche alimente les dates du bloc Réception (LOXAM + CLIENT)
   state.signatures.receptionLoxam.date = v;
   state.signatures.receptionClient.date = v;
   document.querySelectorAll('.sync-datefiche').forEach(i=>{ i.value = v; });
+}
+function syncEmail(v){
+  // L'email d'en-tête alimente l'email de contact du devis (ch. 7), modifiable ensuite
+  state.meta.email = v;
+  state.devis.email = v;
+  document.querySelectorAll('.sync-email').forEach(i=>{ i.value = v; });
 }
 function syncRepresentant(v){
   state.meta.representant = v;
@@ -653,6 +674,10 @@ function renderInfoSection(){
   infoGrid.append(el('div',{class:'field'},
     el('label','Représentant client présent'),
     el('input',{type:'text', value:state.meta.representant, oninput:(e)=>syncRepresentant(e.target.value)})
+  ));
+  infoGrid.append(el('div',{class:'field'},
+    el('label','Email de contact'),
+    el('input',{type:'email', inputmode:'email', autocapitalize:'off', value:state.meta.email, oninput:(e)=>syncEmail(e.target.value)})
   ));
   const telField = textField('Tél','tel');
   telField.style.gridColumn = '2';
@@ -902,6 +927,11 @@ function renderDevisSection(){
   ta.value = state.devis.descriptif;
   df.append(ta);
   c.append(df);
+  c.append(el('div',{class:'field', style:'margin-top:10px;'},
+    el('label','Email de contact'),
+    el('input',{class:'sync-email', type:'email', inputmode:'email', autocapitalize:'off',
+      value:state.devis.email||'', oninput:(e)=>state.devis.email=e.target.value})
+  ));
   // Ajout d'une prestation depuis la grille SAV
   const addWrap = el('div',{class:'devis-add'});
   const sel = el('select',{});
@@ -926,7 +956,7 @@ function renderDevisSection(){
 
   if(state.devis.lignes.length){
     c.append(el('div',{class:'devis-cols'},
-      el('span',{class:'c-desc'},'N\u00b0'), el('span',{class:'c-qty'},'Qt\u00e9'),
+      el('span',{class:'c-desc'},'Code'), el('span',{class:'c-qty'},'Qt\u00e9'),
       el('span',{class:'c-mt'},'Montant'), el('span',{class:'c-del'},'')
     ));
   }
@@ -934,7 +964,7 @@ function renderDevisSection(){
     const mt = el('span',{class:'d-mt'});
     const updMt = ()=>{ mt.textContent = ((parseFloat(l.qty)||0)*(parseFloat(l.pu)||0)).toFixed(2); };
     const row = el('div',{class:'devis-row'},
-      el('span',{class:'d-desc'}, String(idx+1)),
+      el('span',{class:'d-desc'}, 'Refact'+String(idx+1).padStart(2,'0')),
       el('input',{class:'d-qty', type:'number', step:'any', min:'0', value:l.qty, oninput:(e)=>{ l.qty=e.target.value; updMt(); updTotal(); }}),
       mt,
       el('button',{class:'d-del', onclick:()=>{ state.devis.lignes.splice(idx,1); renderAll(); }},'\u2715')
@@ -947,7 +977,7 @@ function renderDevisSection(){
   const depMt = el('span',{class:'d-mt'});
   const updDep = ()=>{ depMt.textContent = ((parseFloat(state.devis.km)||0)*KM_RATE).toFixed(2); };
   const depRow = el('div',{class:'devis-row devis-dep'},
-    el('span',{class:'d-desc'}, 'D'),
+    el('span',{class:'d-desc'}, 'D\u00e9p'),
     el('input',{class:'d-km', type:'number', step:'any', min:'0', inputmode:'decimal', placeholder:'km',
       value:state.devis.km, oninput:(e)=>{ state.devis.km=e.target.value; updDep(); updTotal(); }}),
     depMt,
@@ -955,6 +985,14 @@ function renderDevisSection(){
   );
   updDep();
   c.append(depRow);
+
+  // Légende des codes (affichage app uniquement — pas dans le PDF)
+  if(state.devis.lignes.length){
+    const leg = el('div',{class:'devis-legende'});
+    state.devis.lignes.forEach((l,i)=>
+      leg.append(el('div',{}, 'Refact'+String(i+1).padStart(2,'0')+' \u2014 '+(l.desc||''))));
+    c.append(leg);
+  }
 
   const tot = el('div',{class:'devis-total'}, 'Total HT : ', totalSpan);
   updTotal();
@@ -1097,6 +1135,10 @@ async function generateDevisPDF(){
   doc.setFontSize(9);
   const polit = doc.splitTextToSize("Restant \u00e0 votre disposition pour tous renseignements compl\u00e9mentaires, veuillez agr\u00e9er, l'expression de nos salutations respectueuses.", 290);
   doc.text(polit, M, y+26);
+  if(state.devis.email){
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('Email : ' + state.devis.email, M, y+62);
+  }
   const contact = state.meta.conducteur || CONDUCTEURS[0];
   doc.setFont('helvetica','bold'); doc.setFontSize(10);
   doc.text(contact.toUpperCase(), 370, y+26);
@@ -1485,6 +1527,7 @@ async function doReset(){
   try{ await window.storage.delete('loxchek-draft', false); }catch(e){}
   const fresh = JSON.parse(JSON.stringify(INITIAL_STATE));
   Object.keys(fresh).forEach(k => { state[k] = fresh[k]; });
+  applyDatesParDefaut();
   renderAll();
   window.scrollTo(0,0);
   showToast('Fiche réinitialisée');
@@ -1528,6 +1571,7 @@ document.getElementById('devisBtn').addEventListener('click', async ()=>{
 (async function init(){
   await loadDraft();
   syncSousTraitant();
+  applyDatesParDefaut();
   renderAll();
   setInterval(()=>saveDraft(true), 20000);
 })();
