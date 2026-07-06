@@ -1135,10 +1135,6 @@ async function generateDevisPDF(){
   doc.setFontSize(9);
   const polit = doc.splitTextToSize("Restant \u00e0 votre disposition pour tous renseignements compl\u00e9mentaires, veuillez agr\u00e9er, l'expression de nos salutations respectueuses.", 290);
   doc.text(polit, M, y+26);
-  if(state.devis.email){
-    doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    doc.text('Email : ' + state.devis.email, M, y+62);
-  }
   const contact = state.meta.conducteur || CONDUCTEURS[0];
   doc.setFont('helvetica','bold'); doc.setFontSize(10);
   doc.text(contact.toUpperCase(), 370, y+26);
@@ -1162,6 +1158,10 @@ async function generateDevisPDF(){
   doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
   doc.text('Total HT', W-M-294, totY+17);
   doc.text(total.toFixed(2)+'\u20acht', W-M-8, totY+17, {align:'right'});
+  if(state.devis.email){
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
+    doc.text('Email de contact : ' + state.devis.email, M, totY+17);
+  }
 
   const fname = 'Devis LOXAM Module - ' + ((state.meta.client||'client').trim().replace(/[\\/:*?"<>|]/g,'-') || 'client') + '.pdf';
   if (window.Android && window.Android.savePdf) {
