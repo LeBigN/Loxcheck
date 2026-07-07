@@ -1477,6 +1477,17 @@ async function generatePDF(){
   y += 26;
   sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
 
+  // Mention SAV sous les levées de réserve
+  (function(){
+    const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9); doc.setTextColor(17,24,39);
+    const lines = doc.splitTextToSize(mention, CW - 20);
+    const hh = lines.length * 11 + 14;
+    if(y + hh > MAXY){ y = newPage(); }
+    doc.text(lines, W/2, y + 18, {align:'center'});
+    y += hh;
+  })();
+
   // Annexe photos
   const annex = [];
   CHECKLIST_SECTIONS.forEach(s=> s.items.forEach(i=>{
