@@ -1160,7 +1160,8 @@ async function generateDevisPDF(){
   doc.text(total.toFixed(2)+'\u20acht', W-M-8, totY+17, {align:'right'});
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
   // Nom / Téléphone / Email sur 3 lignes distinctes
-  if(state.meta.client) doc.text(state.meta.client, M, totY+2);
+  const reprLigne = ((state.meta.civilite ? state.meta.civilite + ' ' : '') + (state.meta.representant || '')).trim();
+  if(reprLigne) doc.text(reprLigne, M, totY+2);
   if(state.meta.tel) doc.text(state.meta.tel, M, totY+13);
   if(state.devis.email) doc.text(state.devis.email, M, totY+24);
 
