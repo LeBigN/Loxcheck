@@ -1188,20 +1188,31 @@ async function generatePDF(){
   const frDate = (d)=> d ? String(d).split('-').reverse().join('/') : '';
 
   function dotted(x, yy, w){
-    doc.setDrawColor(60); doc.setLineWidth(0.7);
+    doc.setDrawColor(186,177,163); doc.setLineWidth(0.7);
     doc.setLineDashPattern([1,1.6],0);
     doc.line(x, yy, x+w, yy);
     doc.setLineDashPattern([],0);
   }
-  function checkbox(x, yy, s, checked){
-    doc.setDrawColor(30); doc.setLineWidth(0.9);
-    doc.rect(x, yy, s, s);
+  function checkbox(x, yy, s, checked, col){
+    doc.setDrawColor(176,167,154); doc.setLineWidth(0.9);
+    doc.setFillColor(255,255,255);
+    doc.roundedRect(x, yy, s, s, 2, 2, 'FD');
     if(checked){
-      doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(1.5);
+      const c = col || RED;
+      doc.setDrawColor(c[0],c[1],c[2]); doc.setLineWidth(1.6);
       doc.line(x+s*0.2, yy+s*0.55, x+s*0.42, yy+s*0.78);
       doc.line(x+s*0.42, yy+s*0.78, x+s*0.85, yy+s*0.2);
       doc.setDrawColor(30);
     }
+  }
+  function colColor(c){
+    if(c.smiley === true) return [30,158,90];
+    if(c.smiley === false) return [198,54,46];
+    const t = ((c.t2 ? c.t2.join(' ') : (c.t||''))+'').toUpperCase();
+    if(t.indexOf('NEUF')>-1) return [30,158,90];
+    if(t.indexOf('OCCASION')>-1) return [44,111,176];
+    if(t.indexOf('SANS')>-1) return [107,114,128];
+    return RED;
   }
   function smiley(cx, cy, r, happy){
     doc.setDrawColor(255); doc.setFillColor(255); doc.setLineWidth(1.3);
@@ -1218,16 +1229,24 @@ async function generatePDF(){
     doc.setDrawColor(30); doc.setLineWidth(0.7);
   }
   function pageChrome(){
-    try{ if(LOGO) doc.addImage(LOGO, 'PNG', (W-120)/2, 22, 120, 43); }catch(e){}
-    doc.setTextColor(30,35,45);
-    doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    doc.text('AGENCE 9112', M, 96);
-    doc.text('LOXAM MODULE', M, 110);
-    doc.setFontSize(12);
-    doc.text('FICHE ÉTAT DES LIEUX', W-M, 104, {align:'right'});
-    doc.setDrawColor(70); doc.setLineWidth(1);
-    doc.line(M, 126, W-M, 126);
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.6);
+    // Bandeau d'en-tête doux
+    doc.setFillColor(248,244,237);
+    doc.setDrawColor(235,227,214); doc.setLineWidth(0.8);
+    doc.roundedRect(M-8, 18, CW+16, 66, 8, 8, 'FD');
+    try{ if(LOGO) doc.addImage(LOGO, 'PNG', M+8, 30, 118, 42); }catch(e){}
+    doc.setTextColor(RED[0],RED[1],RED[2]);
+    doc.setFont('helvetica','bold'); doc.setFontSize(13.5);
+    doc.text('FICHE ÉTAT DES LIEUX', W-M-8, 48, {align:'right'});
+    doc.setTextColor(128,118,104); doc.setFontSize(8.6);
+    doc.text('AGENCE 9112  ·  LOXAM MODULE', W-M-8, 64, {align:'right'});
+    // Barre d'accent rouge
+    doc.setFillColor(RED[0],RED[1],RED[2]);
+    doc.roundedRect(M-8, 90, CW+16, 4, 2, 2, 'F');
+    // Pied de page
+    doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.9);
+    doc.line(M, 796, W-M, 796);
+    doc.setTextColor(120,127,138);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.4);
     doc.text('LOXAM MODULE – S.A.S.U. CAPITAL DE 222 559 930 €- SIEGE SOCIAL : 276, UE NICOLAS COATANLEM –', W/2, 806, {align:'center'});
     doc.text('56850 CAUDAN – R.C.S. LORIENT B 433 911 948 – N° T.V.A : FR27 433 911 948 – NAF 7732Z', W/2, 817, {align:'center'});
     doc.setTextColor(17,24,39);
@@ -1235,13 +1254,16 @@ async function generatePDF(){
   function newPage(){ doc.addPage(); pageChrome(); return 150; }
 
   function tableHeader(yy, cols){
-    let x = M;
+    const totalW = cols.reduce((t,c)=>t+c.w, 0);
     doc.setFillColor(RED[0],RED[1],RED[2]);
-    doc.setDrawColor(30); doc.setLineWidth(0.7);
-    cols.forEach(c=>{
-      doc.setFillColor(RED[0],RED[1],RED[2]);
-      doc.setDrawColor(30); doc.setLineWidth(0.7);
-      doc.rect(x, yy, c.w, 28, 'FD');
+    doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.7);
+    doc.roundedRect(M, yy, totalW, 28, 6, 6, 'FD');
+    let x = M;
+    cols.forEach((c, ci)=>{
+      if(ci > 0){
+        doc.setDrawColor(255,255,255); doc.setLineWidth(0.6);
+        doc.line(x, yy+6, x, yy+22);
+      }
       if(c.smiley !== undefined){
         smiley(x+c.w/2, yy+14, 8.5, c.smiley);
       } else if(c.t2){
@@ -1254,18 +1276,23 @@ async function generatePDF(){
       }
       x += c.w;
     });
-    doc.setTextColor(17,24,39);
+    doc.setDrawColor(30); doc.setLineWidth(0.7);
     return yy + 28;
   }
   function statusTable(yy, cols, rows){
     yy = tableHeader(yy, cols);
     const rh = 24;
-    rows.forEach(r=>{
+    rows.forEach((r, ri)=>{
       if(yy + rh > MAXY){ yy = newPage(); yy = tableHeader(yy, cols); }
       let x = M;
       cols.forEach((c, ci)=>{
-        doc.setDrawColor(30); doc.setLineWidth(0.7);
-        doc.rect(x, yy, c.w, rh);
+        doc.setDrawColor(219,212,201); doc.setLineWidth(0.6);
+        if(ri % 2 === 1){
+          doc.setFillColor(251,247,241);
+          doc.rect(x, yy, c.w, rh, 'FD');
+        } else {
+          doc.rect(x, yy, c.w, rh);
+        }
         if(ci === 0){
           doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
           doc.text(r.name, x+5, yy+15, {maxWidth:c.w-9});
@@ -1281,13 +1308,23 @@ async function generatePDF(){
             dotted(x+6, yy+15, c.w-12);
           }
         } else {
-          checkbox(x + c.w/2 - 5, yy + rh/2 - 5, 10, !!r.checks[c.k]);
+          checkbox(x + c.w/2 - 5, yy + rh/2 - 5, 10, !!r.checks[c.k], colColor(c));
         }
         x += c.w;
       });
       yy += rh;
     });
     return yy;
+  }
+
+  function chapTitle(txt){
+    doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
+    const w = doc.getTextWidth(txt) + 24;
+    doc.setFillColor(RED[0],RED[1],RED[2]);
+    doc.roundedRect(M, y-14, w, 20, 10, 10, 'F');
+    doc.setTextColor(255);
+    doc.text(txt, M+12, y);
+    doc.setTextColor(17,24,39);
   }
 
   pageChrome();
@@ -1312,13 +1349,14 @@ async function generatePDF(){
     [[l1,v1,0],[l2,v2,1]].forEach(([lab,val,ci])=>{
       if(lab===null) return;
       const x = colX[ci];
-      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
-      doc.text(lab+' :', x, y);
-      doc.setFont('helvetica','normal'); doc.setFontSize(10);
-      if(val) doc.text(String(val), x, y+13, {maxWidth:colW});
-      dotted(x, y+16, colW);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(RED[0],RED[1],RED[2]);
+      doc.text(lab.toUpperCase(), x+1, y);
+      doc.setFillColor(250,246,240); doc.setDrawColor(233,225,212); doc.setLineWidth(0.7);
+      doc.roundedRect(x, y+4, colW, 19, 4, 4, 'FD');
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.6); doc.setTextColor(17,24,39);
+      if(val) doc.text(String(val), x+7, y+17, {maxWidth:colW-14});
     });
-    y += 34;
+    y += 36;
   }
   infoPair('N° Aff', state.meta.numAff, 'Date', frDate(state.meta.date));
   infoPair('Client', state.meta.client, 'Chantier / Adresse', state.meta.chantier);
@@ -1340,19 +1378,19 @@ async function generatePDF(){
     });
   }
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(17,24,39);
-  doc.text('1. Propreté des modules', M, y); y += 8;
+  chapTitle('1. Propreté des modules'); y += 8;
   y = statusTable(y, colsSmiley, rowsFor(CHECKLIST_SECTIONS[0]));
   y += 22;
   if(y + 90 > MAXY) y = newPage();
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('2. État des panneaux et structure', M, y); y += 8;
+  chapTitle('2. État des panneaux et structure'); y += 8;
   y = statusTable(y, colsSmiley, rowsFor(CHECKLIST_SECTIONS[1]));
   y += 26;
 
   // 3. Clés et mobilier
   if(y + 140 > MAXY) y = newPage();
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('3. Clés et mobilier', M, y); y += 24;
+  chapTitle('3. Clés et mobilier'); y += 24;
   doc.setFontSize(9.5);
   doc.text('Nombre de clés remises :', M, y);
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
@@ -1394,7 +1432,7 @@ async function generatePDF(){
   // 4. Casse
   if(y + 210 > MAXY) y = newPage();
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('4. Casse et dommages constatés', M, y); y += 22;
+  chapTitle('4. Casse et dommages constatés'); y += 22;
   doc.setFontSize(9.5);
   checkbox(M, y-9, 11, state.casse.constat==='none');
   doc.text('Aucune casse / dommage constaté', M+16, y);
@@ -1412,7 +1450,7 @@ async function generatePDF(){
   doc.text(par1, M, y); y += par1.length*14 + 14;
 
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('5. Réserves éventuelles', M, y); y += 22;
+  chapTitle('5. Réserves éventuelles'); y += 22;
   (state.reserves.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
   y += 4;
 
@@ -1433,8 +1471,8 @@ async function generatePDF(){
   }
   function sigTable(sl, sr){
     const half = CW/2, headH = 20, bodyH = 92;
-    doc.setDrawColor(30); doc.setLineWidth(0.8);
-    doc.setFillColor(233,235,238);
+    doc.setDrawColor(197,188,175); doc.setLineWidth(0.8);
+    doc.setFillColor(252,240,236);
     doc.rect(M, y, half, headH, 'FD'); doc.rect(M+half, y, half, headH, 'FD');
     doc.setFont('helvetica','bold'); doc.setFontSize(8.6); doc.setTextColor(17,24,39);
     doc.text('Pour LOXAM MODULE / Sous-traitant — Nom / Visa', M+6, y+13);
@@ -1470,7 +1508,7 @@ async function generatePDF(){
 
   if(y + 150 > MAXY) y = newPage();
   doc.setDrawColor(30); doc.setLineWidth(0.8);
-  doc.setFillColor(233,235,238);
+  doc.setFillColor(251,236,239);
   doc.rect(M, y, CW, 20, 'FD');
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
   doc.text('Levées de Réserve :', M+6, y+13.5);
@@ -1480,12 +1518,16 @@ async function generatePDF(){
   // Mention SAV sous les levées de réserve
   (function(){
     const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
-    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9); doc.setTextColor(17,24,39);
-    const lines = doc.splitTextToSize(mention, CW - 20);
-    const hh = lines.length * 11 + 14;
-    if(y + hh > MAXY){ y = newPage(); }
-    doc.text(lines, W/2, y + 18, {align:'center'});
-    y += hh;
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
+    const lines = doc.splitTextToSize(mention, CW - 36);
+    const boxH = lines.length * 11 + 16;
+    if(y + boxH + 8 > MAXY){ y = newPage(); }
+    doc.setFillColor(252,242,244); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.8);
+    doc.roundedRect(M, y+2, CW, boxH, 6, 6, 'FD');
+    doc.setTextColor(122,24,40);
+    doc.text(lines, W/2, y+19, {align:'center'});
+    doc.setTextColor(17,24,39);
+    y += boxH + 8;
   })();
 
   // Annexe photos
