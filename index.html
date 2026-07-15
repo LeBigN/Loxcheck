@@ -1490,17 +1490,20 @@ async function generatePDF(){
     y += 48;
   }
 
-  // 4. Casse
-  if(y + 210 > MAXY) y = newPage();
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  chapTitle('4. Casse et dommages constatés'); y += 22;
-  doc.setFontSize(9.5);
-  checkbox(M, y-9, 11, state.casse.constat==='none');
-  doc.text('Aucune casse / dommage constaté', M+16, y);
-  checkbox(M+232, y-9, 11, state.casse.constat==='some');
-  doc.text('Casse / dommage constaté (détail ci-dessous)', M+248, y);
-  y += 24;
-  (state.casse.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
+  // 4. Casse — uniquement pour un état des lieux sortant avec dégradation constatée
+  const afficherCasse = (state.meta.type === 'sortant' && state.casse.constat === 'some');
+  if(afficherCasse){
+    if(y + 210 > MAXY) y = newPage();
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    chapTitle('4. Casse et dommages constatés'); y += 22;
+    doc.setFontSize(9.5);
+    checkbox(M, y-9, 11, state.casse.constat==='none');
+    doc.text('Aucune casse / dommage constaté', M+16, y);
+    checkbox(M+232, y-9, 11, state.casse.constat==='some');
+    doc.text('Casse / dommage constaté (détail ci-dessous)', M+248, y);
+    y += 24;
+    (state.casse.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
+  }
 
   // Page 3 : acceptation, réserves, notice, signatures
   y = newPage();
@@ -1601,7 +1604,7 @@ async function generatePDF(){
     const it = state.mobilier[i];
     ((it && it.photos) || []).forEach(p=> annex.push([i, p]));
   });
-  (state.casse.photos || []).forEach(p=> annex.push(['Casse / dommages', p]));
+  if(afficherCasse) (state.casse.photos || []).forEach(p=> annex.push(['Casse / dommages', p]));
   if(annex.length){
     y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
