@@ -412,6 +412,7 @@ async function loadDraft(){
       if(!Array.isArray(state.devis.lignes)) state.devis.lignes = [];
       if(state.devis.km===undefined || state.devis.km===null) state.devis.km='';
       if(state.meta.civilite===undefined) state.meta.civilite='';
+      if(state.meta.type==='levee') state.meta.type='';   // type retiré
       if(state.meta.email===undefined) state.meta.email='';
       if(state.devis.email===undefined) state.devis.email = state.meta.email || '';
       if(state.devis.remise===undefined) state.devis.remise='';
@@ -610,7 +611,7 @@ function syncRepresentant(v){
 function renderInfoSection(){
   const c = el('section',{class:'card', id:'sec-info'});
   const list = el('div',{class:'check-list'});
-  [['reception',"Réception d'ouvrage (livraison)"],['levee','Levée de réserves'],['sortant','État des lieux sortant (démontage)']].forEach(([v,l])=>{
+  [['reception',"Réception d'ouvrage (livraison)"],['sortant','État des lieux sortant (démontage)']].forEach(([v,l])=>{
     const opt = el('div',{class:'check-opt' + (state.meta.type===v?' checked':'')},
       el('div',{class:'box'}, state.meta.type===v ? '✓' : ''),
       el('div',{class:'lbl'}, l)
@@ -746,11 +747,14 @@ function renderCasseSection(){
 
 function renderReservesSection(){
   const c = el('section',{class:'card', id:'sec-reserves'});
-  c.append(el('h2','5. Réserves éventuelles'));
-  const ta = el('textarea',{placeholder:'— Une réserve par ligne…'});
-  ta.value = state.reserves.lignes.join('\n');
-  ta.addEventListener('input',(e)=>{ state.reserves.lignes = e.target.value.split('\n'); });
-  c.append(el('div',{class:'free-lines'}, ta));
+  // Pas de réserves sur un état des lieux sortant (démontage)
+  if(state.meta.type !== 'sortant'){
+    c.append(el('h2','5. Réserves éventuelles'));
+    const ta = el('textarea',{placeholder:'— Une réserve par ligne…'});
+    ta.value = state.reserves.lignes.join('\n');
+    ta.addEventListener('input',(e)=>{ state.reserves.lignes = e.target.value.split('\n'); });
+    c.append(el('div',{class:'free-lines'}, ta));
+  }
 
   const row = el('div',{class:'check-row', style:'margin-top:12px;'});
   [['remise','Remise'],['non_concerne','Non concerné']].forEach(([v,l])=>{
@@ -1401,7 +1405,7 @@ async function generatePDF(){
   doc.text('Cocher le cas correspondant :', M, y);
   y += 24;
   let tx = M;
-  [['reception',"Réception d'ouvrage (livraison)"],['levee','Levée de réserves'],['sortant','État des lieux sortant (démontage)']].forEach(([v,l])=>{
+  [['reception',"Réception d'ouvrage (livraison)"],['sortant','État des lieux sortant (démontage)']].forEach(([v,l])=>{
     checkbox(tx, y-9, 11, state.meta.type===v);
     doc.setFont('helvetica','bold'); doc.setFontSize(9);
     doc.text(l, tx+16, y);
@@ -1518,10 +1522,12 @@ async function generatePDF(){
   const par1 = doc.splitTextToSize('Monsieur ' + mo + ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de " + dj + ' jours au maximum.', CW);
   doc.text(par1, M, y); y += par1.length*14 + 14;
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  chapTitle('5. Réserves éventuelles'); y += 22;
-  (state.reserves.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
-  y += 4;
+  if(state.meta.type !== 'sortant'){
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    chapTitle('5. Réserves éventuelles'); y += 22;
+    (state.reserves.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
+    y += 4;
+  }
 
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
   doc.text("En cas de vente, la notice d'entretien et de maintenance est remise au client.", M, y, {maxWidth:326});
