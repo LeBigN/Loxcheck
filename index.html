@@ -1202,9 +1202,14 @@ async function generateDevisPDF(){
   // Total HT
   const totY = Math.min(y + 110 + (remisePct > 0 ? 34 : 0), 792);
   if(remisePct > 0){
-    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
-    doc.text('Sous-total HT : ' + total.toFixed(2) + ' \u20ac', W-M-8, totY-30, {align:'right'});
-    doc.text('Remise ' + remisePct + ' % : - ' + remiseMt.toFixed(2) + ' \u20ac', W-M-8, totY-16, {align:'right'});
+    const xLab = W-M-300;   // aligné sur le bord gauche du cadre Total HT
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+    doc.text('Sous-total HT', xLab, totY-30);
+    doc.text(total.toFixed(2) + ' \u20ac', W-M-8, totY-30, {align:'right'});
+    doc.setFont('helvetica','bold'); doc.setTextColor(REDD[0],REDD[1],REDD[2]);
+    doc.text('Remise ' + remisePct + ' %', xLab, totY-14);
+    doc.text('- ' + remiseMt.toFixed(2) + ' \u20ac', W-M-8, totY-14, {align:'right'});
+    doc.setFont('helvetica','normal'); doc.setTextColor(17,24,39);
   }
   doc.setFillColor(REDD[0],REDD[1],REDD[2]); doc.setDrawColor(REDD[0],REDD[1],REDD[2]); doc.setLineWidth(1);
   doc.roundedRect(W-M-300, totY, 164, 26, 6, 6, 'FD');
