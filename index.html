@@ -895,7 +895,7 @@ function renderAll(){
   main.append(renderSignaturesSection());
   if(devisAutorise()) main.append(renderDevisSection());
   main.append(el('footer',{class:'legal-footer'},
-    'LOXAM MODULE – S.A.S.U. CAPITAL DE 222 559 930 € - SIÈGE SOCIAL : 276, RUE NICOLAS COATANLEM – 56850 CAUDAN – R.C.S. LORIENT B 433 911 948 – N° T.V.A : FR27 433 911 948 – NAF 7732Z'
+    'LOXAM MODULE – S.A.S.U. CAPITAL DE 487 500 € - SIÈGE SOCIAL : 276, RUE NICOLAS COATANLEM – 56850 CAUDAN – R.C.S. LORIENT B 433 911 948 – N° T.V.A : FR27 433 911 948 – NAF 7732Z'
   ));
   const db = document.getElementById('devisBtn');
   if(db) db.style.display = devisAutorise() ? '' : 'none';
@@ -1231,7 +1231,7 @@ async function generateDevisPDF(){
 
   // Pied de page légal (identique au PV)
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(128,118,104);
-  doc.text('LOXAM MODULE – S.A.S.U. CAPITAL DE 222 559 930 € - SIÈGE SOCIAL : 276, RUE NICOLAS COATANLEM – 56850 CAUDAN –', W/2, 806, {align:'center'});
+  doc.text('LOXAM MODULE – S.A.S.U. CAPITAL DE 487 500 € - SIÈGE SOCIAL : 276, RUE NICOLAS COATANLEM – 56850 CAUDAN –', W/2, 806, {align:'center'});
   doc.text('R.C.S. LORIENT B 433 911 948 – N° T.V.A : FR27 433 911 948 – NAF 7732Z', W/2, 816, {align:'center'});
   doc.setTextColor(17,24,39);
 
@@ -1317,7 +1317,7 @@ async function generatePDF(){
     doc.line(M, 796, W-M, 796);
     doc.setTextColor(120,127,138);
     doc.setFont('helvetica','bold'); doc.setFontSize(7.4);
-    doc.text('LOXAM MODULE – S.A.S.U. CAPITAL DE 222 559 930 €- SIEGE SOCIAL : 276, RUE NICOLAS COATANLEM –', W/2, 806, {align:'center'});
+    doc.text('LOXAM MODULE – S.A.S.U. CAPITAL DE 487 500 €- SIEGE SOCIAL : 276, RUE NICOLAS COATANLEM –', W/2, 806, {align:'center'});
     doc.text('56850 CAUDAN – R.C.S. LORIENT B 433 911 948 – N° T.V.A : FR27 433 911 948 – NAF 7732Z', W/2, 817, {align:'center'});
     doc.setTextColor(17,24,39);
   }
