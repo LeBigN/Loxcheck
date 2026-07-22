@@ -1511,6 +1511,21 @@ async function generatePDF(){
     const f = (arr || []).filter(t => String(t||'').trim() !== '').slice(0,3);
     return f.length ? f : [''];
   }
+  // Liste à puces « - » (sans pointillés) — chapitre 4 Casse
+  function bulletList(lignes){
+    const items = (lignes || []).map(t => String(t||'').trim()).filter(t => t !== '');
+    if(!items.length) return;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+    items.forEach(t=>{
+      const parts = doc.splitTextToSize(t, CW - 18);
+      const h = parts.length*12 + 5;
+      if(y + h > MAXY) y = newPage();
+      doc.text('-', M + 3, y);
+      doc.text(parts, M + 14, y);
+      y += h;
+    });
+    y += 4;
+  }
   function lineGroup(text){
     if(y + 46 > MAXY) y = newPage();
     doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
@@ -1535,7 +1550,7 @@ async function generatePDF(){
     checkbox(M+232, y-9, 11, state.casse.constat==='some');
     doc.text('Casse / dommage constaté (détail ci-dessous)', M+248, y);
     y += 20;
-    lignesUtiles(state.casse.lignes).forEach(t=> lineGroup(t));
+    bulletList(state.casse.lignes);
   }
 
   // Acceptation, réserves, notice, signatures (nouvelle page seulement si besoin)

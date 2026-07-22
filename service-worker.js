@@ -1,4 +1,4 @@
-const CACHE_NAME = 'loxcheck-v41';
+const CACHE_NAME = 'loxcheck-v42';
 const ASSETS = [
   './',
   './index.html',
