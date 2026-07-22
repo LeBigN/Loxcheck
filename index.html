@@ -310,6 +310,9 @@ const STATUS_OPTS = [
   {v:'avec_reserve', l:'Avec réserve'}, {v:'sans_reserve', l:'Sans réserve'}
 ];
 const CONDUCTEURS = ['SCOTTO Nicolas','LAOUAR Hilel'];
+// État des lieux sortant : pas de notion de réserve (démontage)
+function estSortant(){ return state.meta.type === 'sortant'; }
+function sansReserve(opts){ return estSortant() ? opts.filter(o=> o.v!=='avec_reserve' && o.v!=='sans_reserve') : opts; }
 const SOUS_TRAITANTS = ['CRPS','TCPP','TERMICLIM','CC BAT','EMS','CMTG','MOKRANE'];
 
 // ==== Refacturation SAV : prix HT fourniture et pose (grille agence — ajustable) ====
@@ -338,6 +341,9 @@ const PRIX_SAV = [
   {cat:'Climatisation / Chauffage', items:[
     ['Trappe clim',219], ['Remplacement climatiseur 2600W',674], ['Remplacement pompe à chaleur 2000W',942],
     ['Remplacement convecteur 2000W',107], ['Convecteur intelligent',129]
+  ]},
+  {cat:"Main d'\u0153uvre", items:[
+    ["Main d'\u0153uvre forfait heure remise en \u00e9tat suite d\u00e9gradation",48]
   ]},
   {cat:'Nettoyage', items:[
     ['Gros nettoyage intérieur ou extérieur',202],
@@ -692,7 +698,7 @@ function renderInfoSection(){
 function renderChecklistSection(def){
   const c = el('section',{class:'card', id:'sec-'+def.id});
   c.append(el('h2', def.title));
-  def.items.forEach(i => c.append(renderChecklistItem(def.id+'|'+i, state.checklist, false, CHECK_OPTS)));
+  def.items.forEach(i => c.append(renderChecklistItem(def.id+'|'+i, state.checklist, false, sansReserve(CHECK_OPTS))));
   return c;
 }
 
@@ -710,7 +716,7 @@ function renderClesSection(){
         el('input',{type:'number', min:'0', placeholder:'0', value:state.cles.rendues, oninput:(e)=>state.cles.rendues=e.target.value}))
     )
   ));
-  MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, STATUS_OPTS)));
+  MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, sansReserve(STATUS_OPTS))));
   return c;
 }
 
@@ -733,6 +739,7 @@ function renderCasseSection(){
     c.append(photoRow(()=>state.casse.photos, (src)=>state.casse.photos.push(src), (idx)=>state.casse.photos.splice(idx,1)));
   }
 
+  if(!estSortant()){
   const legal = el('div',{class:'legal-block'});
   legal.append(el('p',{}, 'Monsieur'));
   legal.append(el('input',{class:'sync-representant', type:'text', value:state.acceptation.maitreOuvrage,
@@ -742,6 +749,7 @@ function renderCasseSection(){
     oninput:(e)=>state.acceptation.delaiJours=e.target.value}));
   legal.append(el('p',{}, 'jours au maximum.'));
   c.append(legal);
+  }
   return c;
 }
 
@@ -756,6 +764,7 @@ function renderReservesSection(){
     c.append(el('div',{class:'free-lines'}, ta));
   }
 
+  if(!estSortant()){
   const row = el('div',{class:'check-row', style:'margin-top:12px;'});
   [['remise','Remise'],['non_concerne','Non concerné']].forEach(([v,l])=>{
     const active = state.notice.statut===v;
@@ -769,6 +778,7 @@ function renderReservesSection(){
   c.append(el('p',{style:'font-size:13px;color:var(--ink);font-weight:700;text-align:center;margin:6px 0;'},
     "En cas de vente, la notice d'entretien et de maintenance est remise au client."));
   c.append(row);
+  }
   return c;
 }
 
@@ -870,16 +880,18 @@ function renderSignaturesSection(){
     )
   ));
 
-  c.append(el('p',{style:'font-size:11.5px;color:var(--ink);font-style:italic;font-weight:700;margin:0 0 16px;'},
-    "En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite."));
+  if(!estSortant()){
+    c.append(el('p',{style:'font-size:11.5px;color:var(--ink);font-style:italic;font-weight:700;margin:0 0 16px;'},
+      "En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite."));
 
-  c.append(el('div',{class:'sig-block'},
-    el('h3','Levées de Réserve'),
-    el('div',{class:'sig-grid'},
-      sigCellLoxam('Pour LOXAM MODULE / Sous-traitant — Nom / Visa', state.signatures.leveeLoxam),
-      sigCellClient('Pour le CLIENT — Nom / Visa', state.signatures.leveeClient)
-    )
-  ));
+    c.append(el('div',{class:'sig-block'},
+      el('h3','Levées de Réserve'),
+      el('div',{class:'sig-grid'},
+        sigCellLoxam('Pour LOXAM MODULE / Sous-traitant — Nom / Visa', state.signatures.leveeLoxam),
+        sigCellClient('Pour le CLIENT — Nom / Visa', state.signatures.leveeClient)
+      )
+    ));
+  }
   return c;
 }
 
@@ -1251,7 +1263,7 @@ async function generatePDF(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   const W = doc.internal.pageSize.getWidth();
-  const M = 46, CW = W - 2*M, MAXY = 768;
+  const M = 46, CW = W - 2*M, MAXY = 784;
   const RED = [200,16,46];
   let LOGO = '';
   try{ LOGO = document.querySelector('.topbar img').src; }catch(e){}
@@ -1302,16 +1314,16 @@ async function generatePDF(){
     // Bandeau d'en-tête doux
     doc.setFillColor(248,244,237);
     doc.setDrawColor(235,227,214); doc.setLineWidth(0.8);
-    doc.roundedRect(M-8, 18, CW+16, 66, 8, 8, 'FD');
-    try{ if(LOGO) doc.addImage(LOGO, 'PNG', M+8, 30, 118, 42); }catch(e){}
+    doc.roundedRect(M-8, 16, CW+16, 50, 7, 7, 'FD');
+    try{ if(LOGO) doc.addImage(LOGO, 'PNG', M+8, 24, 100, 36); }catch(e){}
     doc.setTextColor(RED[0],RED[1],RED[2]);
     doc.setFont('helvetica','bold'); doc.setFontSize(13.5);
-    doc.text('FICHE ÉTAT DES LIEUX', W-M-8, 48, {align:'right'});
+    doc.text('FICHE ÉTAT DES LIEUX', W-M-8, 40, {align:'right'});
     doc.setTextColor(128,118,104); doc.setFontSize(8.6);
-    doc.text('AGENCE 9112  ·  LOXAM MODULE', W-M-8, 64, {align:'right'});
+    doc.text('AGENCE 9112  ·  LOXAM MODULE', W-M-8, 55, {align:'right'});
     // Barre d'accent rouge
     doc.setFillColor(RED[0],RED[1],RED[2]);
-    doc.roundedRect(M-8, 90, CW+16, 4, 2, 2, 'F');
+    doc.roundedRect(M-8, 72, CW+16, 3.5, 2, 2, 'F');
     // Pied de page
     doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.9);
     doc.line(M, 796, W-M, 796);
@@ -1321,37 +1333,37 @@ async function generatePDF(){
     doc.text('56850 CAUDAN – R.C.S. LORIENT B 433 911 948 – N° T.V.A : FR27 433 911 948 – NAF 7732Z', W/2, 817, {align:'center'});
     doc.setTextColor(17,24,39);
   }
-  function newPage(){ doc.addPage(); pageChrome(); return 150; }
+  function newPage(){ doc.addPage(); pageChrome(); return 104; }
 
   function tableHeader(yy, cols){
     const totalW = cols.reduce((t,c)=>t+c.w, 0);
     doc.setFillColor(RED[0],RED[1],RED[2]);
     doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.7);
-    doc.roundedRect(M, yy, totalW, 28, 6, 6, 'FD');
+    doc.roundedRect(M, yy, totalW, 24, 6, 6, 'FD');
     let x = M;
     cols.forEach((c, ci)=>{
       if(ci > 0){
         doc.setDrawColor(255,255,255); doc.setLineWidth(0.6);
-        doc.line(x, yy+6, x, yy+22);
+        doc.line(x, yy+5, x, yy+19);
       }
       if(c.smiley !== undefined){
-        smiley(x+c.w/2, yy+14, 8.5, c.smiley);
+        smiley(x+c.w/2, yy+12, 8, c.smiley);
       } else if(c.t2){
         doc.setFont('helvetica','bold'); doc.setFontSize(7.6); doc.setTextColor(255);
-        doc.text(c.t2[0], x+c.w/2, yy+12, {align:'center'});
-        doc.text(c.t2[1], x+c.w/2, yy+21, {align:'center'});
+        doc.text(c.t2[0], x+c.w/2, yy+10, {align:'center'});
+        doc.text(c.t2[1], x+c.w/2, yy+19, {align:'center'});
       } else {
         doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.setTextColor(255);
-        doc.text(c.t, x+c.w/2, yy+17.5, {align:'center'});
+        doc.text(c.t, x+c.w/2, yy+15.5, {align:'center'});
       }
       x += c.w;
     });
     doc.setDrawColor(30); doc.setLineWidth(0.7);
-    return yy + 28;
+    return yy + 24;
   }
   function statusTable(yy, cols, rows){
     yy = tableHeader(yy, cols);
-    const rh = 24;
+    const rh = 21;
     rows.forEach((r, ri)=>{
       if(yy + rh > MAXY){ yy = newPage(); yy = tableHeader(yy, cols); }
       let x = M;
@@ -1365,7 +1377,7 @@ async function generatePDF(){
         }
         if(ci === 0){
           doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
-          doc.text(r.name, x+5, yy+15, {maxWidth:c.w-9});
+          doc.text(r.name, x+5, yy+13.5, {maxWidth:c.w-9});
         } else if(c.isQty){
           doc.setFont('helvetica','normal'); doc.setFontSize(9);
           if(r.qty) doc.text(String(r.qty), x+c.w/2, yy+15, {align:'center'});
@@ -1398,12 +1410,12 @@ async function generatePDF(){
   }
 
   pageChrome();
-  let y = 150;
+  let y = 104;
 
   // Type de fiche
   doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
   doc.text('Cocher le cas correspondant :', M, y);
-  y += 24;
+  y += 18;
   let tx = M;
   [['reception',"Réception d'ouvrage (livraison)"],['sortant','État des lieux sortant (démontage)']].forEach(([v,l])=>{
     checkbox(tx, y-9, 11, state.meta.type===v);
@@ -1411,7 +1423,7 @@ async function generatePDF(){
     doc.text(l, tx+16, y);
     tx += 16 + doc.getTextWidth(l) + 22;
   });
-  y += 28;
+  y += 22;
 
   // Infos générales sur lignes pointillées (2 colonnes)
   const colX = [M, M+262], colW = 240;
@@ -1422,11 +1434,11 @@ async function generatePDF(){
       doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(RED[0],RED[1],RED[2]);
       doc.text(lab.toUpperCase(), x+1, y);
       doc.setFillColor(250,246,240); doc.setDrawColor(233,225,212); doc.setLineWidth(0.7);
-      doc.roundedRect(x, y+4, colW, 19, 4, 4, 'FD');
-      doc.setFont('helvetica','normal'); doc.setFontSize(9.6); doc.setTextColor(17,24,39);
-      if(val) doc.text(String(val), x+7, y+17, {maxWidth:colW-14});
+      doc.roundedRect(x, y+3, colW, 17, 4, 4, 'FD');
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.4); doc.setTextColor(17,24,39);
+      if(val) doc.text(String(val), x+7, y+15, {maxWidth:colW-14});
     });
-    y += 36;
+    y += 30;
   }
   infoPair('N° Aff', state.meta.numAff, 'Date', frDate(state.meta.date));
   infoPair('Client', state.meta.client, 'Chantier / Adresse', state.meta.chantier);
@@ -1436,7 +1448,10 @@ async function generatePDF(){
   y += 6;
 
   // Chapitres 1 & 2 (smileys)
-  const colsSmiley = [
+  const colsSmiley = estSortant() ? [
+    {w:190, t:'Élément'}, {w:56, smiley:true, k:0}, {w:56, smiley:false, k:1},
+    {w:201, t:'OBSERVATIONS', isObs:true}
+  ] : [
     {w:150, t:'Élément'}, {w:46, smiley:true, k:0}, {w:46, smiley:false, k:1},
     {w:52, t2:['AVEC','RÉSERVE'], k:2}, {w:52, t2:['SANS','RÉSERVE'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
   ];
@@ -1450,17 +1465,17 @@ async function generatePDF(){
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(17,24,39);
   chapTitle('1. Propreté des modules'); y += 8;
   y = statusTable(y, colsSmiley, rowsFor(CHECKLIST_SECTIONS[0]));
-  y += 22;
+  y += 15;
   if(y + 90 > MAXY) y = newPage();
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
   chapTitle('2. État des panneaux et structure'); y += 8;
   y = statusTable(y, colsSmiley, rowsFor(CHECKLIST_SECTIONS[1]));
-  y += 26;
+  y += 17;
 
   // 3. Clés et mobilier
   if(y + 140 > MAXY) y = newPage();
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  chapTitle('3. Clés et mobilier'); y += 24;
+  chapTitle('3. Clés et mobilier'); y += 20;
   doc.setFontSize(9.5);
   doc.text('Nombre de clés remises :', M, y);
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
@@ -1471,9 +1486,13 @@ async function generatePDF(){
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
   if(state.cles.rendues) doc.text(String(state.cles.rendues), colX[1]+124, y);
   dotted(colX[1]+120, y+3, 100);
-  y += 26;
+  y += 17;
 
-  const colsMob = [
+  const colsMob = estSortant() ? [
+    {w:150, t:'Mobilier / accessoire'}, {w:60, t:'QUANTITÉ', isQty:true},
+    {w:56, t:'NEUF', k:0}, {w:56, t:'OCCASION', k:1},
+    {w:181, t:'OBSERVATIONS', isObs:true}
+  ] : [
     {w:118, t:'Mobilier / accessoire'}, {w:52, t:'QUANTITÉ', isQty:true},
     {w:44, t:'NEUF', k:0}, {w:44, t:'OCCASION', k:1},
     {w:44, t2:['AVEC','RÉS.'], k:2}, {w:44, t2:['SANS','RÉS.'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
@@ -1487,8 +1506,13 @@ async function generatePDF(){
   y += 26;
 
   // Groupes de lignes pointillées (— + 2 lignes)
+  // N'imprime que les lignes remplies (une ligne vide si aucune) pour compacter
+  function lignesUtiles(arr){
+    const f = (arr || []).filter(t => String(t||'').trim() !== '').slice(0,3);
+    return f.length ? f : [''];
+  }
   function lineGroup(text){
-    if(y + 52 > MAXY) y = newPage();
+    if(y + 46 > MAXY) y = newPage();
     doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
     doc.text('—', M, y);
     const parts = text ? doc.splitTextToSize(String(text), CW-4) : [];
@@ -1504,31 +1528,34 @@ async function generatePDF(){
   if(afficherCasse){
     if(y + 210 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    chapTitle('4. Casse et dommages constatés'); y += 22;
+    chapTitle('4. Casse et dommages constatés'); y += 18;
     doc.setFontSize(9.5);
     checkbox(M, y-9, 11, state.casse.constat==='none');
     doc.text('Aucune casse / dommage constaté', M+16, y);
     checkbox(M+232, y-9, 11, state.casse.constat==='some');
     doc.text('Casse / dommage constaté (détail ci-dessous)', M+248, y);
-    y += 24;
-    (state.casse.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
+    y += 20;
+    lignesUtiles(state.casse.lignes).forEach(t=> lineGroup(t));
   }
 
-  // Page 3 : acceptation, réserves, notice, signatures
-  y = newPage();
+  // Acceptation, réserves, notice, signatures (nouvelle page seulement si besoin)
+  if(y + 250 > MAXY) y = newPage(); else y += 10;
   const mo = state.acceptation.maitreOuvrage || '…………………………';
   const dj = state.acceptation.delaiJours || '……';
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(10); doc.setTextColor(17,24,39);
+  if(!estSortant()){
   const par1 = doc.splitTextToSize('Monsieur ' + mo + ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de " + dj + ' jours au maximum.', CW);
-  doc.text(par1, M, y); y += par1.length*14 + 14;
+  doc.text(par1, M, y); y += par1.length*12.5 + 8;
+  }
 
   if(state.meta.type !== 'sortant'){
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    chapTitle('5. Réserves éventuelles'); y += 22;
-    (state.reserves.lignes || ['','','']).slice(0,3).forEach(t=> lineGroup(t));
+    chapTitle('5. Réserves éventuelles'); y += 18;
+    lignesUtiles(state.reserves.lignes).forEach(t=> lineGroup(t));
     y += 4;
   }
 
+  if(!estSortant()){
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
   doc.text("En cas de vente, la notice d'entretien et de maintenance est remise au client.", M, y, {maxWidth:326});
   const wNC = doc.getTextWidth('Non concerné');
@@ -1538,14 +1565,15 @@ async function generatePDF(){
   doc.text('Remise', xRe+15, y);
   checkbox(xNC, y-9, 11, state.notice.statut==='non_concerne');
   doc.text('Non concerné', xNC+15, y);
-  y += 20;
+  y += 12;
+  }
 
   function sigName(s){
     if(!s || !s.nom) return '';
     return (s.nom==='Sous-traitant' && s.entreprise) ? ('Sous-traitant — ' + s.entreprise) : s.nom;
   }
   function sigTable(sl, sr){
-    const half = CW/2, headH = 20, bodyH = 92;
+    const half = CW/2, headH = 18, bodyH = 62;
     doc.setDrawColor(197,188,175); doc.setLineWidth(0.8);
     doc.setFillColor(252,240,236);
     doc.rect(M, y, half, headH, 'FD'); doc.rect(M+half, y, half, headH, 'FD');
@@ -1559,9 +1587,9 @@ async function generatePDF(){
       if(n) doc.text(n, x+8, y+headH+15, {maxWidth:half-16});
       try{
         if(s && s.nom === 'SCOTTO Nicolas'){
-          doc.addImage(SIG_SCOTTO, 'PNG', x + half/2 - 37, y+headH+22, 74, 44);
+          doc.addImage(SIG_SCOTTO, 'PNG', x + half/2 - 32, y+headH+13, 64, 34);
         } else if(s && s.sig){
-          doc.addImage(s.sig, 'PNG', x + half/2 - 60, y+headH+24, 120, 44);
+          doc.addImage(s.sig, 'PNG', x + half/2 - 52, y+headH+14, 104, 34);
         }
       }catch(e){}
       doc.setFont('helvetica','bold'); doc.setFontSize(9);
@@ -1572,26 +1600,28 @@ async function generatePDF(){
     });
     y += headH + bodyH;
   }
-  if(y + 130 > MAXY) y = newPage();
+  if(y + 96 > MAXY) y = newPage();
   sigTable(state.signatures.receptionLoxam, state.signatures.receptionClient);
-  y += 22;
+  y += 10;
 
-  doc.setFont('helvetica','bolditalic'); doc.setFontSize(10);
-  const par2 = doc.splitTextToSize('En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite.', CW-30);
-  par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*14, {align:'center'}));
-  y += par2.length*14 + 18;
+  if(!estSortant()){
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(10);
+    const par2 = doc.splitTextToSize('En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite.', CW-30);
+    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12.5, {align:'center'}));
+    y += par2.length*12.5 + 8;
 
-  if(y + 150 > MAXY) y = newPage();
-  doc.setDrawColor(30); doc.setLineWidth(0.8);
-  doc.setFillColor(251,236,239);
-  doc.rect(M, y, CW, 20, 'FD');
-  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
-  doc.text('Levées de Réserve :', M+6, y+13.5);
-  y += 26;
-  sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
+    if(y + 104 > MAXY) y = newPage();
+    doc.setDrawColor(30); doc.setLineWidth(0.8);
+    doc.setFillColor(251,236,239);
+    doc.rect(M, y, CW, 18, 'FD');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+    doc.text('Levées de Réserve :', M+6, y+12.5);
+    y += 20;
+    sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
+  }
 
-  // Mention SAV sous les levées de réserve
-  (function(){
+  // Mention SAV (pas sur un état des lieux sortant)
+  if(!estSortant()) (function(){
     const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
     const lines = doc.splitTextToSize(mention, CW - 36);
