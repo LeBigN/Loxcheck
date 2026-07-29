@@ -1,7 +1,4 @@
-// Service worker Loxcheck Parc — accès hors ligne complet
-// Stratégie : réseau prioritaire avec délai de garde court, repli immédiat sur
-// la copie locale (pré-téléchargée à l'installation) si le réseau est lent ou absent.
-const CACHE = 'loxcheck-parc-v25';
+const CACHE_NAME = 'loxcheck-v44';
 const ASSETS = [
   './',
   './index.html',
@@ -10,42 +7,48 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-192-maskable.png',
-  './icons/icon-512-maskable.png'
+  './icons/icon-512-maskable.png',
 ];
-const NETWORK_TIMEOUT = 3500; // ms — au-delà, on sert la version locale
 
-// Installation : téléchargement complet de l'application pour le hors ligne
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
-});
-
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k.startsWith('loxcheck-parc-') && k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
+  self.skipWaiting();
 });
 
-function fetchWithTimeout(req){
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timeout')), NETWORK_TIMEOUT);
-    fetch(req).then(res => { clearTimeout(timer); resolve(res); },
-                    err => { clearTimeout(timer); reject(err); });
-  });
-}
-
-self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetchWithTimeout(e.request).then(res => {
-      // Réseau OK : on sert la version fraîche et on met la copie locale à jour
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(()=>{});
-      return res;
-    }).catch(() =>
-      // Réseau lent ou absent : copie locale, avec index.html en secours de navigation
-      caches.match(e.request).then(r => r || (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()))
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
+  );
+  self.clients.claim();
+});
+
+// Strategy:
+// - HTML page (navigation): network-first, so the latest version always shows
+//   when online; falls back to cache when offline.
+// - Other assets (jsPDF, icons): cache-first for speed and offline use.
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  const isHTML = req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').includes('text/html');
+
+  if (isHTML) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req).then((c) => c || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req))
   );
 });

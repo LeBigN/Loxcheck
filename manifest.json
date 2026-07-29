@@ -1,7 +1,7 @@
 {
-  "name": "Loxcheck Parc — Fiche retour modules",
-  "short_name": "Loxcheck Parc",
-  "description": "Fiche retour module parc — Loxam Module Agence 9112",
+  "name": "Loxcheck — État des lieux",
+  "short_name": "Loxcheck",
+  "description": "Loxcheck — état des lieux Loxam Module",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
