@@ -1284,7 +1284,7 @@ async function generatePDF(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   const W = doc.internal.pageSize.getWidth();
-  const M = 46, CW = W - 2*M, MAXY = 784;
+  const M = 46, CW = W - 2*M, MAXY = 798;
   const RED = [200,16,46];
   let LOGO = '';
   try{ LOGO = document.querySelector('.topbar img').src; }catch(e){}
@@ -1384,7 +1384,7 @@ async function generatePDF(){
   }
   function statusTable(yy, cols, rows){
     yy = tableHeader(yy, cols);
-    const rh = 21;
+    const rh = 20;
     if(!rows.length){
       const totalW = cols.reduce((t,c)=>t+c.w, 0);
       doc.setDrawColor(219,212,201); doc.setLineWidth(0.6);
@@ -1407,7 +1407,7 @@ async function generatePDF(){
         }
         if(ci === 0){
           doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(17,24,39);
-          doc.text(r.name, x+5, yy+13.5, {maxWidth:c.w-9});
+          doc.text(r.name, x+5, yy+13, {maxWidth:c.w-9});
         } else if(c.isQty){
           doc.setFont('helvetica','normal'); doc.setFontSize(9);
           if(r.qty) doc.text(String(r.qty), x+c.w/2, yy+15, {align:'center'});
@@ -1593,7 +1593,7 @@ async function generatePDF(){
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(10); doc.setTextColor(17,24,39);
   if(!estSortant()){
   const par1 = doc.splitTextToSize('Monsieur ' + mo + ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de " + dj + ' jours au maximum.', CW);
-  doc.text(par1, M, y); y += par1.length*12.5 + 8;
+  doc.text(par1, M, y); y += par1.length*12 + 6;
   }
 
   if(state.meta.type !== 'sortant'){
@@ -1621,7 +1621,7 @@ async function generatePDF(){
     return (s.nom==='Sous-traitant' && s.entreprise) ? ('Sous-traitant — ' + s.entreprise) : s.nom;
   }
   function sigTable(sl, sr){
-    const half = CW/2, headH = 18, bodyH = 62;
+    const half = CW/2, headH = 17, bodyH = 56;
     doc.setDrawColor(197,188,175); doc.setLineWidth(0.8);
     doc.setFillColor(252,240,236);
     doc.rect(M, y, half, headH, 'FD'); doc.rect(M+half, y, half, headH, 'FD');
@@ -1648,23 +1648,23 @@ async function generatePDF(){
     });
     y += headH + bodyH;
   }
-  if(y + 96 > MAXY) y = newPage();
+  if(y + 88 > MAXY) y = newPage();
   sigTable(state.signatures.receptionLoxam, state.signatures.receptionClient);
-  y += 10;
+  y += 8;
 
   if(!estSortant()){
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(10);
     const par2 = doc.splitTextToSize('En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite.', CW-30);
-    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12.5, {align:'center'}));
-    y += par2.length*12.5 + 8;
+    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12, {align:'center'}));
+    y += par2.length*12 + 6;
 
-    if(y + 104 > MAXY) y = newPage();
+    if(y + 96 > MAXY) y = newPage();
     doc.setDrawColor(30); doc.setLineWidth(0.8);
     doc.setFillColor(251,236,239);
-    doc.rect(M, y, CW, 18, 'FD');
-    doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
-    doc.text('Levées de Réserve :', M+6, y+12.5);
-    y += 20;
+    doc.rect(M, y, CW, 16, 'FD');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(17,24,39);
+    doc.text('Levées de Réserve :', M+6, y+11.5);
+    y += 18;
     sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
   }
 
@@ -1673,14 +1673,14 @@ async function generatePDF(){
     const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
     const lines = doc.splitTextToSize(mention, CW - 36);
-    const boxH = lines.length * 11 + 16;
-    if(y + boxH + 8 > MAXY){ y = newPage(); }
+    const boxH = lines.length * 10.5 + 12;
+    if(y + boxH + 6 > MAXY){ y = newPage(); }
     doc.setFillColor(252,242,244); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.8);
     doc.roundedRect(M, y+2, CW, boxH, 6, 6, 'FD');
     doc.setTextColor(122,24,40);
-    doc.text(lines, W/2, y+19, {align:'center'});
+    doc.text(lines, W/2, y+16, {align:'center'});
     doc.setTextColor(17,24,39);
-    y += boxH + 8;
+    y += boxH + 6;
   })();
 
   // Annexe photos
