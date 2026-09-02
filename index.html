@@ -1650,7 +1650,7 @@ async function generatePDF(){
   const electroRows = ELECTRO_ITEMS.map(i=>{
     const it = state.mobilier[i] || {statuses:[],obs:''};
     return { name:i, obs:it.obs, checks: ['livre','non_livre'].map(k=> (it.statuses||[]).includes(k)) };
-  }).filter(r=> r.checks.some(Boolean) || (r.obs && r.obs.trim()));
+  }).filter(r=> r.checks.some(Boolean));   // affiché seulement si Livré ou Non livré est coché
   if(electroRows.length){
     if(y + 60 > MAXY) y = newPage();
     const colsElectro = [
@@ -1658,8 +1658,8 @@ async function generatePDF(){
       {w:CW-340, t:'OBSERVATIONS', isObs:true}
     ];
     y = statusTable(y, colsElectro, electroRows);
+    y += 12;
   }
-  y += 12;
 
   // Groupes de lignes pointillées (— + 2 lignes)
   // N'imprime que les lignes remplies (une ligne vide si aucune) pour compacter
@@ -1740,12 +1740,13 @@ async function generatePDF(){
       doc.text('Aucune réserve', M + 3, y); doc.setTextColor(17,24,39);
       y += 14;
     }
-    y += 6;
+    y += 12;
   }
 
   if(!estSortant()){
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
-  doc.text("En cas de vente, la notice d'entretien et de maintenance est remise au client.", M, y, {maxWidth:326});
+  const noticeLines = doc.splitTextToSize("En cas de vente, la notice d'entretien et de maintenance est remise au client.", 326);
+  doc.text(noticeLines, M, y);
   const wNC = doc.getTextWidth('Non concerné');
   const xNC = W - M - wNC - 16;
   const xRe = xNC - doc.getTextWidth('Remise') - 38;
@@ -1753,7 +1754,8 @@ async function generatePDF(){
   doc.text('Remise', xRe+15, y);
   checkbox(xNC, y-9, 11, state.notice.statut==='non_concerne');
   doc.text('Non concerné', xNC+15, y);
-  y += 12;
+  // Réserver la place du texte réellement occupée (1 ou 2 lignes) + marge sous la notice
+  y += Math.max(1, noticeLines.length) * 13 + 8;
   }
 
   function sigName(s){
@@ -1790,13 +1792,13 @@ async function generatePDF(){
   }
   if(y + 84 > MAXY) y = newPage();
   sigTable(state.signatures.receptionLoxam, state.signatures.receptionClient);
-  y += 6;
+  y += 14;
 
   if(!estSortant()){
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
     const par2 = doc.splitTextToSize('En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite.', CW-30);
-    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*11.5, {align:'center'}));
-    y += par2.length*11.5 + 5;
+    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12, {align:'center'}));
+    y += par2.length*12 + 14;
 
     if(y + 90 > MAXY) y = newPage();
     doc.setDrawColor(30); doc.setLineWidth(0.8);
