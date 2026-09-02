@@ -160,6 +160,13 @@ input, select, textarea{ max-width:100%; min-width:0; box-sizing:border-box; }
 }
 .photo-row{display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;}
 .ico{display:inline-block; vertical-align:middle; flex:0 0 auto;}
+.reserve-lines{display:flex; flex-direction:column; gap:8px; margin-top:4px;}
+.reserve-line{display:flex; align-items:center; gap:8px;}
+.reserve-dash{color:var(--sub); font-weight:700; flex:0 0 auto;}
+.reserve-line input{flex:1; min-width:0; border:1px solid var(--line); border-radius:9px; padding:10px 11px; font-size:15px; font-family:inherit; background:#fff; color:var(--ink);}
+.reserve-del{flex:0 0 auto; width:34px; height:34px; border:1px solid var(--line); background:#fff; color:var(--sub); border-radius:8px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;}
+.reserve-del:active{background:#f5f2ee;}
+.add-line-btn{margin-top:10px; display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--red-dark); background:var(--red-tint); border:1px dashed #E8B5BC; border-radius:9px; padding:9px 14px; cursor:pointer;}
 .btn .ico, .photo-btn .ico, .keys-title .ico, .sig-lock .ico{margin-right:6px;}
 .btn, .photo-btn, .keys-title, .sig-lock{display:inline-flex; align-items:center; justify-content:center;}
 .btn-icon .ico{margin-right:0;}
@@ -326,7 +333,8 @@ function icon(name, size){
     check:   '<polyline points="20 6 9 17 4 12"/>',
     x:       '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     hand:    '<path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
-    loader:  '<line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.9" y1="4.9" x2="7.8" y2="7.8"/><line x1="16.2" y1="16.2" x2="19.1" y2="19.1"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.9" y1="19.1" x2="7.8" y2="16.2"/><line x1="16.2" y1="7.8" x2="19.1" y2="4.9"/>'
+    loader:  '<line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.9" y1="4.9" x2="7.8" y2="7.8"/><line x1="16.2" y1="16.2" x2="19.1" y2="19.1"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.9" y1="19.1" x2="7.8" y2="16.2"/><line x1="16.2" y1="7.8" x2="19.1" y2="4.9"/>',
+    plus:    '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'
   };
   const sz = size || 18;
   return '<svg class="ico" viewBox="0 0 24 24" width="'+sz+'" height="'+sz+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[name]||'')+'</svg>';
@@ -406,6 +414,8 @@ const CHECKLIST_SECTIONS = [
 ];
 
 const MOBILIER_ITEMS = ['Table(s)','Chaise(s)','Chaise(s) tissu','Armoire(s) vestiaire','Banc(s)','Armoire(s) bureau','Caisson(s)'];
+const ELECTRO_ITEMS = ['Électroménager'];
+const ELECTRO_OPTS = [ {v:'livre', l:'Livré'}, {v:'non_livre', l:'Non livré'} ];
 
 const state = {
   meta:{ type:'reception', numAff:'', date:'', client:'', chantier:'', refCommande:'', nbModules:'', conducteur:'', sousTraitant:'', representant:'', civilite:'', email:'', tel:'' },
@@ -427,6 +437,7 @@ CHECKLIST_SECTIONS.forEach(s => s.items.forEach(i => {
   state.checklist[s.id+'|'+i] = { statuses:[], obs:'', photos:[] };
 }));
 MOBILIER_ITEMS.forEach(i => { state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
+ELECTRO_ITEMS.forEach(i => { state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
 
 // Snapshot of the empty fiche, used to fully reset the form.
 const INITIAL_STATE = JSON.parse(JSON.stringify(state));
@@ -456,6 +467,8 @@ async function loadDraft(){
       if(!Array.isArray(state.devis.lignes)) state.devis.lignes = [];
       if(state.devis.km===undefined || state.devis.km===null) state.devis.km='';
       if(state.meta.civilite===undefined) state.meta.civilite='';
+      if(!Array.isArray(state.reserves.lignes) || !state.reserves.lignes.length) state.reserves.lignes = [''];
+      ELECTRO_ITEMS.forEach(i=>{ if(!state.mobilier[i]) state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
       if(state.meta.type==='levee') state.meta.type='';   // type retiré
       if(state.meta.email===undefined) state.meta.email='';
       if(state.devis.email===undefined) state.devis.email = state.meta.email || '';
@@ -511,7 +524,8 @@ function el(tag, attrs={}, ...children){
 
 // Paires exclusives : cocher l'un décoche l'autre (max 2 cases par ligne : état + réserve)
 const STATUS_PAIRES = { ok:'nok', nok:'ok', neuf:'occasion', occasion:'neuf',
-                        avec_reserve:'sans_reserve', sans_reserve:'avec_reserve' };
+                        avec_reserve:'sans_reserve', sans_reserve:'avec_reserve',
+                        livre:'non_livre', non_livre:'livre' };
 
 function statusCheckRow(keyId, statuses, onToggle, opts){
   const row = el('div',{class:'radio-row'});
@@ -610,11 +624,26 @@ function renderChecklistItem(key, storeObj, showQty, opts){
         oninput:(e)=>{ data.qty = e.target.value; } })
     ));
   }
+  // Pour les chapitres à smiley : les cases "Avec/Sans réserve" ne s'affichent
+  // que si le smiley "pas content" (nok) est sélectionné.
+  const aSmiley = (opts||STATUS_OPTS).some(o=> o.v==='ok' || o.v==='nok');
+  let optsAffichees = opts;
+  if(aSmiley && !estSortant()){
+    if(data.statuses.includes('nok')){
+      optsAffichees = opts;                                   // nok -> montrer les réserves
+    } else {
+      optsAffichees = opts.filter(o=> o.v!=='avec_reserve' && o.v!=='sans_reserve');
+      // si on repasse au content, on retire toute réserve précédemment cochée
+      data.statuses = data.statuses.filter(x=> x!=='avec_reserve' && x!=='sans_reserve');
+    }
+  }
   item.append(statusCheckRow('r-'+key.replace(/\W/g,'_'), data.statuses, (v, on)=>{
     if(on){ if(!data.statuses.includes(v)) data.statuses.push(v); }
     else { data.statuses = data.statuses.filter(x=>x!==v); }
+    // Recalcule l'affichage des cases réserve quand on change de smiley
+    if(v==='ok' || v==='nok'){ updateProgress(); renderAll(); return; }
     updateProgress();
-  }, opts));
+  }, optsAffichees));
   item.append(el('div',{class:'item-obs'},
     el('input',{type:'text', placeholder:'Observation (optionnel)', value:data.obs,
       oninput:(e)=>{ data.obs = e.target.value; } })
@@ -635,6 +664,12 @@ function syncSousTraitant(){
       state.signatures[k].entreprise = state.meta.sousTraitant;
     });
   }
+  syncLeveeDepuisReception();
+}
+function syncLeveeDepuisReception(){
+  // La Levée de réserves LOXAM/Sous-traitant reprend le nom saisi pour la Réception
+  const r = state.signatures.receptionLoxam, l = state.signatures.leveeLoxam;
+  if(r.nom){ l.nom = r.nom; if(r.nom === 'Sous-traitant') l.entreprise = r.entreprise || ''; }
 }
 function devisAutorise(){
   // Refacturation visible uniquement pour un état des lieux sortant (démontage),
@@ -775,6 +810,8 @@ function renderClesSection(){
     )
   ));
   MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, sansReserve(STATUS_OPTS))));
+  // Électroménager : cases Livré / Non livré + photo
+  ELECTRO_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, false, ELECTRO_OPTS)));
   return c;
 }
 
@@ -816,10 +853,34 @@ function renderReservesSection(){
   // Pas de réserves sur un état des lieux sortant (démontage)
   if(state.meta.type !== 'sortant'){
     c.append(el('h2','5. Réserves éventuelles'));
-    const ta = el('textarea',{placeholder:'— Une réserve par ligne…'});
-    ta.value = state.reserves.lignes.join('\n');
-    ta.addEventListener('input',(e)=>{ state.reserves.lignes = e.target.value.split('\n'); });
-    c.append(el('div',{class:'free-lines'}, ta));
+    // Lignes dynamiques : autant que nécessaire
+    if(!Array.isArray(state.reserves.lignes)) state.reserves.lignes = [''];
+    if(!state.reserves.lignes.length) state.reserves.lignes = [''];
+    const list = el('div',{class:'reserve-lines'});
+    const rebuild = ()=>{
+      list.textContent = '';
+      state.reserves.lignes.forEach((val, idx)=>{
+        const rowEl = el('div',{class:'reserve-line'});
+        rowEl.append(el('span',{class:'reserve-dash'},'—'));
+        rowEl.append(el('input',{type:'text', placeholder:'Réserve…', value:val,
+          oninput:(e)=>{ state.reserves.lignes[idx] = e.target.value; }}));
+        const del = el('button',{class:'reserve-del', title:'Supprimer', onclick:()=>{
+          state.reserves.lignes.splice(idx,1);
+          if(!state.reserves.lignes.length) state.reserves.lignes = [''];
+          rebuild();
+        }});
+        del.innerHTML = icon('x',15);
+        rowEl.append(del);
+        list.append(rowEl);
+      });
+    };
+    rebuild();
+    c.append(list);
+    const addBtn = el('button',{class:'add-line-btn', onclick:()=>{
+      state.reserves.lignes.push(''); rebuild();
+    }});
+    addBtn.innerHTML = icon('plus',15) + '<span>Ajouter une ligne</span>';
+    c.append(addBtn);
   }
 
   if(!estSortant()){
@@ -902,7 +963,7 @@ function sigCellClient(label, sigObj){
 function sigCellLoxam(label, sigObj){
   const cell = el('div',{class:'sig-cell'});
   cell.append(el('div',{class:'sig-label'}, label));
-  const sel = el('select',{onchange:(e)=>{ sigObj.nom = e.target.value; renderAll(); }});
+  const sel = el('select',{onchange:(e)=>{ sigObj.nom = e.target.value; if(sigObj===state.signatures.receptionLoxam) syncLeveeDepuisReception(); renderAll(); }});
   sel.append(el('option',{value:''},'—'));
   [...CONDUCTEURS, 'Sous-traitant'].forEach(o=>{
     sel.append(el('option',{value:o, ...(sigObj.nom===o?{selected:'selected'}:{})}, o));
@@ -913,7 +974,7 @@ function sigCellLoxam(label, sigObj){
   cell.append(sel);
   if(sigObj.nom === 'Sous-traitant'){
     cell.append(el('input',{type:'text', placeholder:"Nom de l'entreprise", value:sigObj.entreprise||'',
-      oninput:(e)=>sigObj.entreprise=e.target.value}));
+      oninput:(e)=>{ sigObj.entreprise=e.target.value; if(sigObj===state.signatures.receptionLoxam){ syncLeveeDepuisReception(); const li=document.querySelector('.levee-entreprise'); if(li) li.value=e.target.value; } }}));
   }
   cell.append(el('input',{type:'date', class:(sigObj===state.signatures.receptionLoxam?'sync-datefiche':''), value:sigObj.date, oninput:(e)=>sigObj.date=e.target.value}));
   if(sigObj.nom === 'SCOTTO Nicolas'){
@@ -1574,7 +1635,22 @@ async function generatePDF(){
     return { name:i, qty:it.qty, obs:it.obs, checks: mobKeys.map(k=> (it.statuses||[]).includes(k)) };
   }).filter(r=> r.checks.some(Boolean) || (r.qty && String(r.qty).trim()) || (r.obs && r.obs.trim()));
   y = statusTable(y, colsMob, mobRows);
-  y += 26;
+  y += 14;
+
+  // Électroménager : colonnes Livré / Non livré
+  const electroRows = ELECTRO_ITEMS.map(i=>{
+    const it = state.mobilier[i] || {statuses:[],obs:''};
+    return { name:i, obs:it.obs, checks: ['livre','non_livre'].map(k=> (it.statuses||[]).includes(k)) };
+  }).filter(r=> r.checks.some(Boolean) || (r.obs && r.obs.trim()));
+  if(electroRows.length){
+    if(y + 60 > MAXY) y = newPage();
+    const colsElectro = [
+      {w:200, t:'Électroménager'}, {w:70, t:'LIVRÉ', k:0}, {w:70, t:'NON LIVRÉ', k:1},
+      {w:CW-340, t:'OBSERVATIONS', isObs:true}
+    ];
+    y = statusTable(y, colsElectro, electroRows);
+  }
+  y += 12;
 
   // Groupes de lignes pointillées (— + 2 lignes)
   // N'imprime que les lignes remplies (une ligne vide si aucune) pour compacter
@@ -1624,8 +1700,9 @@ async function generatePDF(){
     bulletList(state.casse.lignes);
   }
 
-  // Acceptation, réserves, notice, signatures (nouvelle page seulement si besoin)
-  if(y + 250 > MAXY) y = newPage(); else y += 10;
+  // Acceptation, réserves, notice, signatures — on n'ajoute qu'un léger espace,
+  // les sauts de page se font au plus près du contenu (évite les pages 1/4 pleines)
+  y += 10;
   const mo = state.acceptation.maitreOuvrage || '…………………………';
   const dj = state.acceptation.delaiJours || '……';
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(10); doc.setTextColor(17,24,39);
@@ -1636,9 +1713,25 @@ async function generatePDF(){
 
   if(state.meta.type !== 'sortant'){
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    if(y + 40 > MAXY) y = newPage();
     chapTitle('5. Réserves éventuelles'); y += 18;
-    lignesUtiles(state.reserves.lignes).forEach(t=> lineGroup(t));
-    y += 4;
+    const reserves = (state.reserves.lignes || []).map(t=> String(t||'').trim()).filter(Boolean);
+    if(reserves.length){
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+      reserves.forEach(t=>{
+        const parts = doc.splitTextToSize(t, CW - 18);
+        const h = parts.length*12 + 5;
+        if(y + h > MAXY) y = newPage();
+        doc.text('-', M + 3, y);
+        doc.text(parts, M + 14, y);
+        y += h;
+      });
+    } else {
+      doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(140,130,118);
+      doc.text('Aucune réserve', M + 3, y); doc.setTextColor(17,24,39);
+      y += 14;
+    }
+    y += 6;
   }
 
   if(!estSortant()){
@@ -1686,23 +1779,23 @@ async function generatePDF(){
     });
     y += headH + bodyH;
   }
-  if(y + 88 > MAXY) y = newPage();
+  if(y + 84 > MAXY) y = newPage();
   sigTable(state.signatures.receptionLoxam, state.signatures.receptionClient);
-  y += 8;
+  y += 6;
 
   if(!estSortant()){
-    doc.setFont('helvetica','bolditalic'); doc.setFontSize(10);
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
     const par2 = doc.splitTextToSize('En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite.', CW-30);
-    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12, {align:'center'}));
-    y += par2.length*12 + 6;
+    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*11.5, {align:'center'}));
+    y += par2.length*11.5 + 5;
 
-    if(y + 96 > MAXY) y = newPage();
+    if(y + 90 > MAXY) y = newPage();
     doc.setDrawColor(30); doc.setLineWidth(0.8);
     doc.setFillColor(251,236,239);
-    doc.rect(M, y, CW, 16, 'FD');
+    doc.rect(M, y, CW, 15, 'FD');
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(17,24,39);
-    doc.text('Levées de Réserve :', M+6, y+11.5);
-    y += 18;
+    doc.text('Levées de Réserve :', M+6, y+11);
+    y += 17;
     sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
   }
 
@@ -1711,12 +1804,12 @@ async function generatePDF(){
     const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
     const lines = doc.splitTextToSize(mention, CW - 36);
-    const boxH = lines.length * 10.5 + 12;
-    if(y + boxH + 6 > MAXY){ y = newPage(); }
+    const boxH = lines.length * 10.5 + 10;
+    if(y + boxH + 4 > MAXY){ y = newPage(); }
     doc.setFillColor(252,242,244); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.8);
     doc.roundedRect(M, y+2, CW, boxH, 6, 6, 'FD');
     doc.setTextColor(122,24,40);
-    doc.text(lines, W/2, y+16, {align:'center'});
+    doc.text(lines, W/2, y+15, {align:'center'});
     doc.setTextColor(17,24,39);
     y += boxH + 6;
   })();
