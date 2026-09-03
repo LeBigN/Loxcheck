@@ -639,6 +639,8 @@ function renderChecklistItem(key, storeObj, showQty, opts){
   // Pour les chapitres à smiley : les cases "Avec/Sans réserve" ne s'affichent
   // que si le smiley "pas content" (nok) est sélectionné.
   const aSmiley = (opts||STATUS_OPTS).some(o=> o.v==='ok' || o.v==='nok');
+  // Pour le mobilier (Neuf/Occasion) : les cases réserve n'apparaissent que si "Occasion".
+  const aNeufOccasion = (opts||STATUS_OPTS).some(o=> o.v==='neuf' || o.v==='occasion');
   let optsAffichees = opts;
   if(aSmiley && !estSortant()){
     if(data.statuses.includes('nok')){
@@ -648,12 +650,20 @@ function renderChecklistItem(key, storeObj, showQty, opts){
       // si on repasse au content, on retire toute réserve précédemment cochée
       data.statuses = data.statuses.filter(x=> x!=='avec_reserve' && x!=='sans_reserve');
     }
+  } else if(aNeufOccasion && !estSortant()){
+    if(data.statuses.includes('occasion')){
+      optsAffichees = opts;                                   // Occasion -> montrer les réserves
+    } else {
+      optsAffichees = opts.filter(o=> o.v!=='avec_reserve' && o.v!=='sans_reserve');
+      // Neuf (ou rien) -> masquer et retirer toute réserve précédemment cochée
+      data.statuses = data.statuses.filter(x=> x!=='avec_reserve' && x!=='sans_reserve');
+    }
   }
   item.append(statusCheckRow('r-'+key.replace(/\W/g,'_'), data.statuses, (v, on)=>{
     if(on){ if(!data.statuses.includes(v)) data.statuses.push(v); }
     else { data.statuses = data.statuses.filter(x=>x!==v); }
-    // Recalcule l'affichage des cases réserve quand on change de smiley
-    if(v==='ok' || v==='nok'){ updateProgress(); renderAll(); return; }
+    // Recalcule l'affichage des cases réserve quand on change de smiley ou de Neuf/Occasion
+    if(v==='ok' || v==='nok' || v==='neuf' || v==='occasion'){ updateProgress(); renderAll(); return; }
     updateProgress();
   }, optsAffichees));
   item.append(el('div',{class:'item-obs'},
