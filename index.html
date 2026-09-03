@@ -435,6 +435,7 @@ const state = {
   acceptation:{ maitreOuvrage:'', delaiJours:'' },
   reserves:{ lignes:['','',''] },
   notice:{ statut:'' }, // 'remise' | 'non_concerne'
+  leveeReserve:{ effectuee:false },
   devis:{ numero:'', date:'', descriptif:'Refacturation pour dommages constat\u00e9s lors de la restitution des modules', lignes:[], km:'', email:'', remise:'' }, // lignes: {desc, qty, pu} — refacturation HT
   signatures:{
     receptionLoxam:{ nom:'', date:'', sig:'', entreprise:'' }, receptionClient:{ nom:'', date:'', sig:'', entreprise:'' },
@@ -471,6 +472,8 @@ async function loadDraft(){
       Object.assign(state.acceptation, loaded.acceptation||{});
       Object.assign(state.reserves, loaded.reserves||{});
       Object.assign(state.notice, loaded.notice||{});
+      if(!state.leveeReserve) state.leveeReserve = { effectuee:false };
+      Object.assign(state.leveeReserve, loaded.leveeReserve||{});
       Object.assign(state.signatures, loaded.signatures||{});
       if(loaded.devis){ Object.assign(state.devis, loaded.devis); }
       if(!Array.isArray(state.devis.lignes)) state.devis.lignes = [];
@@ -757,7 +760,6 @@ function renderInfoSection(){
   })());
   infoGrid.append(textField('Client','client'));
   infoGrid.append(textField('Chantier / Adresse','chantier'));
-  infoGrid.append(textField('Réf. commande','refCommande'));
   infoGrid.append(textField('Nombre de modules','nbModules','number'));
   infoGrid.append((()=>{
     const sel = el('select',{onchange:(e)=>{ state.meta.conducteur=e.target.value; syncSousTraitant(); renderAll(); }});
@@ -773,7 +775,7 @@ function renderInfoSection(){
     SOUS_TRAITANTS.forEach(o=> sel.append(el('option',{value:o, ...(state.meta.sousTraitant===o?{selected:'selected'}:{})}, o)));
     if(state.meta.sousTraitant && !SOUS_TRAITANTS.includes(state.meta.sousTraitant))
       sel.append(el('option',{value:state.meta.sousTraitant, selected:'selected'}, state.meta.sousTraitant));
-    return el('div',{class:'field'}, el('label','Sous-traitant présent'), sel);
+    return el('div',{class:'field'}, el('label','Sous-traitant'), sel);
   })());
   infoGrid.append((()=>{
     const sel = el('select',{onchange:(e)=>{ state.meta.civilite=e.target.value; }});
@@ -1013,13 +1015,20 @@ function renderSignaturesSection(){
     c.append(el('p',{style:'font-size:11.5px;color:var(--ink);font-style:italic;font-weight:700;margin:0 0 16px;'},
       "En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite."));
 
-    c.append(el('div',{class:'sig-block'},
-      el('h3','Levées de Réserve'),
-      el('div',{class:'sig-grid'},
+    // Case à cocher : les signatures de levée n'apparaissent sur le PDF que si cochée
+    const leveeToggle = el('div',{class:'check-opt' + (state.leveeReserve.effectuee ? ' checked' : ''), style:'margin-bottom:12px;'});
+    const lbox = el('div',{class:'box'});
+    if(state.leveeReserve.effectuee) lbox.innerHTML = icon('check',16);
+    leveeToggle.append(lbox, el('div',{class:'lbl'},'Levée de réserves effectuée'));
+    leveeToggle.addEventListener('click', ()=>{ state.leveeReserve.effectuee = !state.leveeReserve.effectuee; renderAll(); });
+    const leveeBlock = el('div',{class:'sig-block'}, el('h3','Levées de Réserve'), leveeToggle);
+    if(state.leveeReserve.effectuee){
+      leveeBlock.append(el('div',{class:'sig-grid'},
         sigCellLoxam('Pour LOXAM MODULE / Sous-traitant — Nom / Visa', state.signatures.leveeLoxam),
         sigCellClient('Pour le CLIENT — Nom / Visa', state.signatures.leveeClient)
-      )
-    ));
+      ));
+    }
+    c.append(leveeBlock);
   }
   return c;
 }
@@ -1580,8 +1589,8 @@ async function generatePDF(){
   }
   infoPair('N° Aff', state.meta.numAff, 'Date', frDate(state.meta.date));
   infoPair('Client', state.meta.client, 'Chantier / Adresse', state.meta.chantier);
-  infoPair('Réf. commande', state.meta.refCommande, 'Conducteur de travaux', state.meta.conducteur);
-  infoPair('Nombre de modules', state.meta.nbModules, 'Sous-traitant présent', state.meta.sousTraitant);
+  infoPair('Conducteur de travaux', state.meta.conducteur, null, null);
+  infoPair('Nombre de modules', state.meta.nbModules, 'Sous-traitant', state.meta.sousTraitant);
   infoPair('Représentant client présent', ((state.meta.civilite? state.meta.civilite+' ' : '') + (state.meta.representant||'')).trim(), 'Tél', state.meta.tel);
   infoPair('Email de contact', state.meta.email, null, null);
   y += 6;
@@ -1723,6 +1732,7 @@ async function generatePDF(){
   }
 
   if(state.meta.type !== 'sortant'){
+    y += 16;   // espace au-dessus du chapitre 5
     if(y + 56 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
     chapTitle('5. Réserves éventuelles'); y += 16;
@@ -1814,14 +1824,16 @@ async function generatePDF(){
     par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12, {align:'center'}));
     y += par2.length*12 + 14;
 
-    if(y + 90 > MAXY) y = newPage();
-    doc.setDrawColor(30); doc.setLineWidth(0.8);
-    doc.setFillColor(251,236,239);
-    doc.rect(M, y, CW, 15, 'FD');
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(17,24,39);
-    doc.text('Levées de Réserve :', M+6, y+11);
-    y += 17;
-    sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
+    if(state.leveeReserve && state.leveeReserve.effectuee){
+      if(y + 90 > MAXY) y = newPage();
+      doc.setDrawColor(30); doc.setLineWidth(0.8);
+      doc.setFillColor(251,236,239);
+      doc.rect(M, y, CW, 15, 'FD');
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(17,24,39);
+      doc.text('Levées de Réserve :', M+6, y+11);
+      y += 17;
+      sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
+    }
   }
 
   // Mention SAV (pas sur un état des lieux sortant)
