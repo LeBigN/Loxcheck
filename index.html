@@ -777,12 +777,14 @@ function renderInfoSection(){
       sel.append(el('option',{value:state.meta.sousTraitant, selected:'selected'}, state.meta.sousTraitant));
     return el('div',{class:'field'}, el('label','Sous-traitant'), sel);
   })());
+  // Civilité (droite, en paire avec Sous-traitant)
   infoGrid.append((()=>{
     const sel = el('select',{onchange:(e)=>{ state.meta.civilite=e.target.value; }});
     [['','\u2014'],['M','M'],['Mme','Mme']].forEach(([v,l])=>
       sel.append(el('option',{value:v, ...(state.meta.civilite===v?{selected:'selected'}:{})}, l)));
     return el('div',{class:'field'}, el('label','Civilit\u00e9'), sel);
   })());
+  // Ligne : Représentant (gauche) | Email de contact (droite)
   // Ce champ alimente automatiquement "Monsieur ..." (ch. 4) et les signatures CLIENT (ch. 6)
   infoGrid.append(el('div',{class:'field'},
     el('label','Représentant client présent'),
@@ -792,9 +794,8 @@ function renderInfoSection(){
     el('label','Email de contact'),
     el('input',{type:'email', inputmode:'email', autocapitalize:'off', value:state.meta.email, oninput:(e)=>syncEmail(e.target.value)})
   ));
-  const telField = textField('Tél','tel');
-  telField.style.gridColumn = '2';
-  infoGrid.append(telField);
+  // Tél (gauche, aligné sous Représentant client présent)
+  infoGrid.append(textField('Tél','tel'));
   c.append(infoGrid);
   return c;
 }
@@ -1591,8 +1592,8 @@ async function generatePDF(){
   infoPair('Client', state.meta.client, 'Chantier / Adresse', state.meta.chantier);
   infoPair('Conducteur de travaux', state.meta.conducteur, null, null);
   infoPair('Nombre de modules', state.meta.nbModules, 'Sous-traitant', state.meta.sousTraitant);
-  infoPair('Représentant client présent', ((state.meta.civilite? state.meta.civilite+' ' : '') + (state.meta.representant||'')).trim(), 'Tél', state.meta.tel);
-  infoPair('Email de contact', state.meta.email, null, null);
+  infoPair('Représentant client présent', ((state.meta.civilite? state.meta.civilite+' ' : '') + (state.meta.representant||'')).trim(), null, null);
+  infoPair('Tél', state.meta.tel, 'Email de contact', state.meta.email);
   y += 6;
 
   // Chapitres 1 & 2 (smileys)
@@ -1819,13 +1820,29 @@ async function generatePDF(){
   y += 14;
 
   if(!estSortant()){
+    // Pré-calcul de la hauteur du bloc de fin (En conséquence + Levée éventuelle + SAV)
+    // pour décider d'un éventuel saut de page UNE SEULE FOIS, et éviter qu'un
+    // élément (ex: l'encadré SAV) se retrouve seul sur une page suivante.
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
     const par2 = doc.splitTextToSize('En conséquence, le présent proces verbal de réception a été établi sous réserve de tous recours en responsabilité pour vice ou défauts cachés pouvant se manifester par la suite.', CW-30);
-    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12, {align:'center'}));
-    y += par2.length*12 + 14;
+    const hCons = par2.length*12 + 10;
+    const leveeOn = !!(state.leveeReserve && state.leveeReserve.effectuee);
+    const hLevee = leveeOn ? (17 + 20 + 92) : 0;   // titre + en-tête + corps sigTable
+    const mentionSAV = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
+    const savLines = doc.splitTextToSize(mentionSAV, CW - 36);
+    const hSAV = savLines.length * 10.5 + 10 + 16;   // encadré + espace au-dessus
+    const hBlocFin = hCons + hLevee + hSAV;
+    // Un seul saut de page si tout le bloc de fin ne tient pas ici
+    if(y + hBlocFin > MAXY) y = newPage();
 
-    if(state.leveeReserve && state.leveeReserve.effectuee){
-      if(y + 90 > MAXY) y = newPage();
+    // 1) Clause "En conséquence"
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+    par2.forEach((ln,i)=> doc.text(ln, W/2, y+i*12, {align:'center'}));
+    y += hCons;
+
+    // 2) Levée de réserves (si cochée)
+    if(leveeOn){
       doc.setDrawColor(30); doc.setLineWidth(0.8);
       doc.setFillColor(251,236,239);
       doc.rect(M, y, CW, 15, 'FD');
@@ -1834,23 +1851,18 @@ async function generatePDF(){
       y += 17;
       sigTable(state.signatures.leveeLoxam, state.signatures.leveeClient);
     }
-  }
 
-  // Mention SAV (pas sur un état des lieux sortant)
-  if(!estSortant()) (function(){
-    y += 14;   // espace au-dessus de la mention SAV
-    const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
+    // 3) Mention SAV (solidaire du bloc, plus de saut isolé)
+    y += 10;
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
-    const lines = doc.splitTextToSize(mention, CW - 36);
-    const boxH = lines.length * 10.5 + 10;
-    if(y + boxH + 4 > MAXY){ y = newPage(); }
+    const boxH = savLines.length * 10.5 + 10;
     doc.setFillColor(252,242,244); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(0.8);
     doc.roundedRect(M, y+2, CW, boxH, 6, 6, 'FD');
     doc.setTextColor(122,24,40);
-    doc.text(lines, W/2, y+15, {align:'center'});
+    doc.text(savLines, W/2, y+15, {align:'center'});
     doc.setTextColor(17,24,39);
     y += boxH + 6;
-  })();
+  }
 
   // Annexe photos
   const annex = [];
