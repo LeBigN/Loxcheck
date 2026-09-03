@@ -1583,6 +1583,7 @@ async function generatePDF(){
   infoPair('Réf. commande', state.meta.refCommande, 'Conducteur de travaux', state.meta.conducteur);
   infoPair('Nombre de modules', state.meta.nbModules, 'Sous-traitant présent', state.meta.sousTraitant);
   infoPair('Représentant client présent', ((state.meta.civilite? state.meta.civilite+' ' : '') + (state.meta.representant||'')).trim(), 'Tél', state.meta.tel);
+  infoPair('Email de contact', state.meta.email, null, null);
   y += 6;
 
   // Chapitres 1 & 2 (smileys)
@@ -1603,6 +1604,7 @@ async function generatePDF(){
     const remplies = rows.filter(r=> r.checks.some(Boolean) || (r.obs && r.obs.trim()));
     return remplies;
   }
+  y += 16;   // espace au-dessus du chapitre 1
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(17,24,39);
   chapTitle('1. Propreté des modules'); y += 8;
   y = statusTable(y, colsSmiley, rowsFor(CHECKLIST_SECTIONS[0]));
@@ -1721,26 +1723,38 @@ async function generatePDF(){
   }
 
   if(state.meta.type !== 'sortant'){
+    if(y + 56 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    if(y + 40 > MAXY) y = newPage();
-    chapTitle('5. Réserves éventuelles'); y += 18;
+    chapTitle('5. Réserves éventuelles'); y += 16;
     const reserves = (state.reserves.lignes || []).map(t=> String(t||'').trim()).filter(Boolean);
+    // Pré-calcul de la hauteur du contenu pour dessiner un cadre de mise en valeur
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    let contentH = 0;
+    const wrapped = [];
     if(reserves.length){
-      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
-      reserves.forEach(t=>{
-        const parts = doc.splitTextToSize(t, CW - 18);
-        const h = parts.length*12 + 5;
-        if(y + h > MAXY) y = newPage();
-        doc.text('-', M + 3, y);
-        doc.text(parts, M + 14, y);
-        y += h;
+      reserves.forEach(t=>{ const parts = doc.splitTextToSize(t, CW - 30); wrapped.push(parts); contentH += parts.length*13 + 5; });
+    } else {
+      contentH = 18;
+    }
+    const boxH = contentH + 14;
+    if(y + boxH > MAXY) y = newPage();
+    // Cadre sable arrondi (met les réserves en valeur)
+    doc.setFillColor(250,246,240); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(1);
+    doc.roundedRect(M, y, CW, boxH, 7, 7, 'FD');
+    let yy = y + 16;
+    if(reserves.length){
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(17,24,39);
+      wrapped.forEach(parts=>{
+        doc.setFillColor(RED[0],RED[1],RED[2]);
+        doc.circle(M + 12, yy - 3, 2, 'F');                 // puce ronde rouge
+        doc.text(parts, M + 22, yy);
+        yy += parts.length*13 + 5;
       });
     } else {
-      doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(140,130,118);
-      doc.text('Aucune réserve', M + 3, y); doc.setTextColor(17,24,39);
-      y += 14;
+      doc.setFont('helvetica','italic'); doc.setFontSize(9.5); doc.setTextColor(140,130,118);
+      doc.text('Aucune réserve', M + 14, yy); doc.setTextColor(17,24,39);
     }
-    y += 12;
+    y += boxH + 12;
   }
 
   if(!estSortant()){
@@ -1812,6 +1826,7 @@ async function generatePDF(){
 
   // Mention SAV (pas sur un état des lieux sortant)
   if(!estSortant()) (function(){
+    y += 14;   // espace au-dessus de la mention SAV
     const mention = "Pour toute demande de SAV ou d'intervention, merci de bien vouloir contacter l'agence au 04 42 46 72 80 ou par e-mail à l'adresse suivante : accueilmarseille@loxam-module.com";
     doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
     const lines = doc.splitTextToSize(mention, CW - 36);
