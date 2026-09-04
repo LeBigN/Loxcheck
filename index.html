@@ -431,9 +431,9 @@ const state = {
   checklist:{},
   cles:{ remises:'', rendues:'' },
   mobilier:{},
-  casse:{ constat:'none', lignes:['','',''], photos:[] },
+  casse:{ constat:'none', lignes:['','',''], photos:[], requis:false },
   acceptation:{ maitreOuvrage:'', delaiJours:'' },
-  reserves:{ lignes:['','',''] },
+  reserves:{ lignes:['','',''], raccordement:false },
   notice:{ statut:'' }, // 'remise' | 'non_concerne'
   leveeReserve:{ effectuee:false },
   devis:{ numero:'', date:'', descriptif:'Refacturation pour dommages constat\u00e9s lors de la restitution des modules', lignes:[], km:'', email:'', remise:'' }, // lignes: {desc, qty, pu} — refacturation HT
@@ -469,6 +469,7 @@ async function loadDraft(){
       Object.assign(state.cles, loaded.cles||{});
       Object.assign(state.mobilier, loaded.mobilier||{});
       Object.assign(state.casse, loaded.casse||{});
+      if(state.casse.requis===undefined) state.casse.requis=false;
       Object.assign(state.acceptation, loaded.acceptation||{});
       Object.assign(state.reserves, loaded.reserves||{});
       Object.assign(state.notice, loaded.notice||{});
@@ -480,6 +481,7 @@ async function loadDraft(){
       if(state.devis.km===undefined || state.devis.km===null) state.devis.km='';
       if(state.meta.civilite===undefined) state.meta.civilite='';
       if(!Array.isArray(state.reserves.lignes) || !state.reserves.lignes.length) state.reserves.lignes = [''];
+      if(state.reserves.raccordement===undefined) state.reserves.raccordement=false;
       ELECTRO_ITEMS.forEach(i=>{ if(!state.mobilier[i]) state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
       if(state.meta.type==='levee') state.meta.type='';   // type retiré
       if(state.meta.email===undefined) state.meta.email='';
@@ -840,7 +842,15 @@ function renderClesSection(){
 function renderCasseSection(){
   const c = el('section',{class:'card', id:'sec-casse'});
   c.append(el('h2','4. Casse et dommages constatés'));
-  const row = el('div',{class:'radio-row'});
+  // Case à cocher : le chapitre ne s'affiche que si explicitement requis
+  const req = el('div',{class:'check-opt' + (state.casse.requis ? ' checked' : '')});
+  const reqBox = el('div',{class:'box'});
+  if(state.casse.requis) reqBox.innerHTML = icon('check',16);
+  req.append(reqBox, el('div',{class:'lbl'},'Constater une casse ou un dommage'));
+  req.addEventListener('click', ()=>{ state.casse.requis = !state.casse.requis; if(!state.casse.requis) state.casse.constat='none'; renderAll(); });
+  c.append(req);
+  if(!state.casse.requis){ return c; }
+  const row = el('div',{class:'radio-row', style:'margin-top:12px;'});
   [['none','Aucune casse / dommage constaté'],['some','Casse / dommage constaté (détail ci-dessous)']].forEach(([v,l])=>{
     const id='casse-'+v;
     const input = el('input',{type:'radio', name:'casse', id, ...(state.casse.constat===v?{checked:'checked'}:{})});
@@ -856,17 +866,6 @@ function renderCasseSection(){
     c.append(photoRow(()=>state.casse.photos, (src)=>state.casse.photos.push(src), (idx)=>state.casse.photos.splice(idx,1)));
   }
 
-  if(!estSortant()){
-  const legal = el('div',{class:'legal-block'});
-  legal.append(el('p',{}, 'Monsieur'));
-  legal.append(el('input',{class:'sync-representant', type:'text', value:state.acceptation.maitreOuvrage,
-    oninput:(e)=>state.acceptation.maitreOuvrage=e.target.value}));
-  legal.append(el('p',{}, ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de"));
-  legal.append(el('input',{type:'number', min:'0', value:state.acceptation.delaiJours,
-    oninput:(e)=>state.acceptation.delaiJours=e.target.value}));
-  legal.append(el('p',{}, 'jours au maximum.'));
-  c.append(legal);
-  }
   return c;
 }
 
@@ -875,6 +874,13 @@ function renderReservesSection(){
   // Pas de réserves sur un état des lieux sortant (démontage)
   if(state.meta.type !== 'sortant'){
     c.append(el('h2','5. Réserves éventuelles'));
+    // Case à cocher : sous réserve de raccordement eau/électricité
+    const racc = el('div',{class:'check-opt' + (state.reserves.raccordement ? ' checked' : ''), style:'margin-bottom:14px;'});
+    const rbox = el('div',{class:'box'});
+    if(state.reserves.raccordement) rbox.innerHTML = icon('check',16);
+    racc.append(rbox, el('div',{class:'lbl'},"Sous réserve de raccordement à l'eau et à l'électricité."));
+    racc.addEventListener('click', ()=>{ state.reserves.raccordement = !state.reserves.raccordement; renderAll(); });
+    c.append(racc);
     // Lignes dynamiques : autant que nécessaire
     if(!Array.isArray(state.reserves.lignes)) state.reserves.lignes = [''];
     if(!state.reserves.lignes.length) state.reserves.lignes = [''];
@@ -903,6 +909,17 @@ function renderReservesSection(){
     }});
     addBtn.innerHTML = icon('plus',15) + '<span>Ajouter une ligne</span>';
     c.append(addBtn);
+
+    // Phrase contractuelle "Monsieur ..., Maitre de l'ouvrage ..." (déplacée du ch.4)
+    const legal = el('div',{class:'legal-block', style:'margin-top:16px;'});
+    legal.append(el('p',{}, 'Monsieur'));
+    legal.append(el('input',{class:'sync-representant', type:'text', value:state.acceptation.maitreOuvrage,
+      oninput:(e)=>state.acceptation.maitreOuvrage=e.target.value}));
+    legal.append(el('p',{}, ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de"));
+    legal.append(el('input',{type:'number', min:'0', value:state.acceptation.delaiJours,
+      oninput:(e)=>state.acceptation.delaiJours=e.target.value}));
+    legal.append(el('p',{}, 'jours au maximum.'));
+    c.append(legal);
   }
 
   if(!estSortant()){
@@ -1716,8 +1733,9 @@ async function generatePDF(){
     y += 48;
   }
 
-  // 4. Casse — uniquement pour un état des lieux sortant avec dégradation constatée
-  const afficherCasse = (state.meta.type === 'sortant' && state.casse.constat === 'some');
+  // 4. Casse — affiché si demandé explicitement (case cochée) avec dégradation constatée,
+  // ou pour un état des lieux sortant avec casse constatée
+  const afficherCasse = ((state.casse.requis || state.meta.type === 'sortant') && state.casse.constat === 'some');
   if(afficherCasse){
     if(y + 210 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
@@ -1734,19 +1752,20 @@ async function generatePDF(){
   // Acceptation, réserves, notice, signatures — on n'ajoute qu'un léger espace,
   // les sauts de page se font au plus près du contenu (évite les pages 1/4 pleines)
   y += 10;
-  const mo = state.acceptation.maitreOuvrage || '…………………………';
-  const dj = state.acceptation.delaiJours || '……';
-  doc.setFont('helvetica','bolditalic'); doc.setFontSize(10); doc.setTextColor(17,24,39);
-  if(!estSortant()){
-  const par1 = doc.splitTextToSize('Monsieur ' + mo + ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de " + dj + ' jours au maximum.', CW);
-  doc.text(par1, M, y); y += par1.length*12 + 6;
-  }
 
   if(state.meta.type !== 'sortant'){
     y += 16;   // espace au-dessus du chapitre 5
     if(y + 56 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
     chapTitle('5. Réserves éventuelles'); y += 16;
+    // Case à cocher : sous réserve de raccordement eau/électricité
+    (function(){
+      const txt = "Sous réserve de raccordement à l'eau et à l'électricité.";
+      checkbox(M, y-9, 12, !!state.reserves.raccordement);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
+      doc.text(txt, M+18, y);
+      y += 22;   // espace suffisant sous la case
+    })();
     const reserves = (state.reserves.lignes || []).map(t=> String(t||'').trim()).filter(Boolean);
     // Pré-calcul de la hauteur du contenu pour dessiner un cadre de mise en valeur
     doc.setFont('helvetica','normal'); doc.setFontSize(10);
@@ -1776,6 +1795,14 @@ async function generatePDF(){
       doc.text('Aucune réserve', M + 14, yy); doc.setTextColor(17,24,39);
     }
     y += boxH + 12;
+
+    // Phrase contractuelle "Monsieur ..., Maitre de l'ouvrage ..." sous les réserves
+    const mo = state.acceptation.maitreOuvrage || '…………………………';
+    const dj = state.acceptation.delaiJours || '……';
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(10); doc.setTextColor(17,24,39);
+    const parClause = doc.splitTextToSize('Monsieur ' + mo + ", Maitre de l'ouvrage, reconnaît que les travaux ont été réalisés conformément aux plans et prescriptions des pieces contractuelle, déclare les accepter sous réserve des travaux désignés ci-apres qui devront etre excecutés dans un délai de " + dj + ' jours au maximum.', CW);
+    if(y + parClause.length*12 + 6 > MAXY) y = newPage();
+    doc.text(parClause, M, y); y += parClause.length*12 + 8;
   }
 
   if(!estSortant()){
