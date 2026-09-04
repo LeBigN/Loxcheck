@@ -431,7 +431,7 @@ const state = {
   checklist:{},
   cles:{ remises:'', rendues:'' },
   mobilier:{},
-  casse:{ constat:'none', lignes:['','',''], photos:[], requis:false },
+  casse:{ constat:'none', lignes:['','',''], photos:[] },
   acceptation:{ maitreOuvrage:'', delaiJours:'' },
   reserves:{ lignes:['','',''], raccordement:false },
   notice:{ statut:'' }, // 'remise' | 'non_concerne'
@@ -469,7 +469,6 @@ async function loadDraft(){
       Object.assign(state.cles, loaded.cles||{});
       Object.assign(state.mobilier, loaded.mobilier||{});
       Object.assign(state.casse, loaded.casse||{});
-      if(state.casse.requis===undefined) state.casse.requis=false;
       Object.assign(state.acceptation, loaded.acceptation||{});
       Object.assign(state.reserves, loaded.reserves||{});
       Object.assign(state.notice, loaded.notice||{});
