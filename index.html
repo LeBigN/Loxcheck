@@ -840,17 +840,11 @@ function renderClesSection(){
 }
 
 function renderCasseSection(){
+  // Chapitre 4 : masqué pour une Réception d'ouvrage (montage), visible pour un état des lieux sortant (démontage)
+  if(!estSortant()){ return null; }
   const c = el('section',{class:'card', id:'sec-casse'});
   c.append(el('h2','4. Casse et dommages constatés'));
-  // Case à cocher : le chapitre ne s'affiche que si explicitement requis
-  const req = el('div',{class:'check-opt' + (state.casse.requis ? ' checked' : '')});
-  const reqBox = el('div',{class:'box'});
-  if(state.casse.requis) reqBox.innerHTML = icon('check',16);
-  req.append(reqBox, el('div',{class:'lbl'},'Constater une casse ou un dommage'));
-  req.addEventListener('click', ()=>{ state.casse.requis = !state.casse.requis; if(!state.casse.requis) state.casse.constat='none'; renderAll(); });
-  c.append(req);
-  if(!state.casse.requis){ return c; }
-  const row = el('div',{class:'radio-row', style:'margin-top:12px;'});
+  const row = el('div',{class:'radio-row'});
   [['none','Aucune casse / dommage constaté'],['some','Casse / dommage constaté (détail ci-dessous)']].forEach(([v,l])=>{
     const id='casse-'+v;
     const input = el('input',{type:'radio', name:'casse', id, ...(state.casse.constat===v?{checked:'checked'}:{})});
@@ -870,8 +864,9 @@ function renderCasseSection(){
 }
 
 function renderReservesSection(){
+  // Section 5 masquée en état des lieux sortant (démontage)
+  if(state.meta.type === 'sortant'){ return null; }
   const c = el('section',{class:'card', id:'sec-reserves'});
-  // Pas de réserves sur un état des lieux sortant (démontage)
   if(state.meta.type !== 'sortant'){
     c.append(el('h2','5. Réserves éventuelles'));
     // Case à cocher : sous réserve de raccordement eau/électricité
@@ -1068,8 +1063,10 @@ function renderAll(){
   main.append(renderInfoSection());
   CHECKLIST_SECTIONS.forEach(def => main.append(renderChecklistSection(def)));
   main.append(renderClesSection());
-  main.append(renderCasseSection());
-  main.append(renderReservesSection());
+  const casseSec = renderCasseSection();
+  if(casseSec) main.append(casseSec);
+  const reservesSec = renderReservesSection();
+  if(reservesSec) main.append(reservesSec);
   main.append(renderSignaturesSection());
   if(devisAutorise()) main.append(renderDevisSection());
   main.append(el('footer',{class:'legal-footer'},
@@ -1735,7 +1732,7 @@ async function generatePDF(){
 
   // 4. Casse — affiché si demandé explicitement (case cochée) avec dégradation constatée,
   // ou pour un état des lieux sortant avec casse constatée
-  const afficherCasse = ((state.casse.requis || state.meta.type === 'sortant') && state.casse.constat === 'some');
+  const afficherCasse = (state.meta.type === 'sortant' && state.casse.constat === 'some');
   if(afficherCasse){
     if(y + 210 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
