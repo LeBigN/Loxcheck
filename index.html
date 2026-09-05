@@ -222,7 +222,7 @@ input, select, textarea{ max-width:100%; min-width:0; box-sizing:border-box; }
 .sig-auto-note{font-size:11px; color:var(--sub); margin-top:4px;}
 .sig-pad{margin-top:10px;}
 .sig-pad-label{font-size:11px; font-weight:600; color:var(--sub); margin-bottom:4px;}
-.sig-canvas{width:100%; height:110px; border:1.5px dashed var(--line); border-radius:8px; background:#fff; touch-action:none; display:block;}
+.sig-canvas{width:100%; height:180px; border:1.5px dashed var(--line); border-radius:8px; background:#fff; touch-action:none; display:block;}
 .sig-clear{margin-top:6px; background:#EEF0F3; color:var(--red-dark); border:none; border-radius:8px; padding:7px 10px; font-size:12px; font-weight:600;}
 @media (max-width:560px){ .sig-grid{grid-template-columns:1fr;} }
 
@@ -364,6 +364,11 @@ const STATUS_OPTS = [
   {v:'neuf', l:'Neuf'}, {v:'occasion', l:'Occasion'},
   {v:'avec_reserve', l:'Avec réserve'}, {v:'sans_reserve', l:'Sans réserve'}
 ];
+// Mobilier en état des lieux sortant : smileys (content / pas content) comme la propreté
+const MOBILIER_SMILEY_OPTS = [
+  {v:'ok', svg:SMILEY_OK},
+  {v:'nok', svg:SMILEY_NOK}
+];
 const CONDUCTEURS = ['SCOTTO Nicolas','LAOUAR Hilel'];
 // État des lieux sortant : pas de notion de réserve (démontage)
 function estSortant(){ return state.meta.type === 'sortant'; }
@@ -469,6 +474,7 @@ async function loadDraft(){
       Object.assign(state.cles, loaded.cles||{});
       Object.assign(state.mobilier, loaded.mobilier||{});
       Object.assign(state.casse, loaded.casse||{});
+      if(!Array.isArray(state.casse.lignes) || !state.casse.lignes.length) state.casse.lignes = [''];
       Object.assign(state.acceptation, loaded.acceptation||{});
       Object.assign(state.reserves, loaded.reserves||{});
       Object.assign(state.notice, loaded.notice||{});
@@ -832,7 +838,7 @@ function renderClesSection(){
         el('input',{type:'number', min:'0', placeholder:'0', value:state.cles.rendues, oninput:(e)=>state.cles.rendues=e.target.value}))
     )
   ));
-  MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, sansReserve(STATUS_OPTS))));
+  MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, estSortant() ? MOBILIER_SMILEY_OPTS : sansReserve(STATUS_OPTS))));
   // Électroménager : cases Livré / Non livré + photo
   ELECTRO_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, false, ELECTRO_OPTS)));
   return c;
@@ -852,10 +858,34 @@ function renderCasseSection(){
   });
   c.append(row);
   if(state.casse.constat==='some'){
-    const ta = el('textarea',{placeholder:'— Détail des dommages constatés…'});
-    ta.value = state.casse.lignes.join('\n');
-    ta.addEventListener('input',(e)=>{ state.casse.lignes = e.target.value.split('\n'); });
-    c.append(el('div',{class:'free-lines', style:'margin-top:10px;'}, ta));
+    // Lignes dynamiques (comme les réserves) : autant que nécessaire
+    if(!Array.isArray(state.casse.lignes)) state.casse.lignes = [''];
+    if(!state.casse.lignes.length) state.casse.lignes = [''];
+    const list = el('div',{class:'reserve-lines', style:'margin-top:10px;'});
+    const rebuild = ()=>{
+      list.textContent = '';
+      state.casse.lignes.forEach((val, idx)=>{
+        const rowEl = el('div',{class:'reserve-line'});
+        rowEl.append(el('span',{class:'reserve-dash'},'—'));
+        rowEl.append(el('input',{type:'text', placeholder:'Dommage constaté…', value:val,
+          oninput:(e)=>{ state.casse.lignes[idx] = e.target.value; }}));
+        const del = el('button',{class:'reserve-del', title:'Supprimer', onclick:()=>{
+          state.casse.lignes.splice(idx,1);
+          if(!state.casse.lignes.length) state.casse.lignes = [''];
+          rebuild();
+        }});
+        del.innerHTML = icon('x',15);
+        rowEl.append(del);
+        list.append(rowEl);
+      });
+    };
+    rebuild();
+    c.append(list);
+    const addBtn = el('button',{class:'add-line-btn', onclick:()=>{
+      state.casse.lignes.push(''); rebuild();
+    }});
+    addBtn.innerHTML = icon('plus',15) + '<span>Ajouter une ligne</span>';
+    c.append(addBtn);
     c.append(photoRow(()=>state.casse.photos, (src)=>state.casse.photos.push(src), (idx)=>state.casse.photos.splice(idx,1)));
   }
 
@@ -936,7 +966,7 @@ function renderReservesSection(){
 
 function sigPad(sigObj){
   const wrap = el('div',{class:'sig-pad'});
-  const canvas = el('canvas',{class:'sig-canvas', width:'600', height:'200'});
+  const canvas = el('canvas',{class:'sig-canvas', width:'600', height:'320'});
   let ctx = null;
   try{ ctx = canvas.getContext('2d'); }catch(e){}
   if(ctx && sigObj.sig){
@@ -1666,14 +1696,14 @@ async function generatePDF(){
 
   const colsMob = estSortant() ? [
     {w:150, t:'Mobilier / accessoire'}, {w:60, t:'QUANTITÉ', isQty:true},
-    {w:56, t:'NEUF', k:0}, {w:56, t:'OCCASION', k:1},
+    {w:56, smiley:true, k:0}, {w:56, smiley:false, k:1},
     {w:181, t:'OBSERVATIONS', isObs:true}
   ] : [
     {w:118, t:'Mobilier / accessoire'}, {w:52, t:'QUANTITÉ', isQty:true},
     {w:44, t:'NEUF', k:0}, {w:44, t:'OCCASION', k:1},
     {w:44, t2:['AVEC','RÉS.'], k:2}, {w:44, t2:['SANS','RÉS.'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
   ];
-  const mobKeys = ['neuf','occasion','avec_reserve','sans_reserve'];
+  const mobKeys = estSortant() ? ['ok','nok'] : ['neuf','occasion','avec_reserve','sans_reserve'];
   const mobRows = MOBILIER_ITEMS.map(i=>{
     const it = state.mobilier[i] || {qty:'',statuses:[],obs:''};
     return { name:i, qty:it.qty, obs:it.obs, checks: mobKeys.map(k=> (it.statuses||[]).includes(k)) };
@@ -1733,16 +1763,38 @@ async function generatePDF(){
   // ou pour un état des lieux sortant avec casse constatée
   const afficherCasse = (state.meta.type === 'sortant' && state.casse.constat === 'some');
   if(afficherCasse){
-    if(y + 210 > MAXY) y = newPage();
+    y += 8;   // espace au-dessus du chapitre 4
+    if(y + 120 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    chapTitle('4. Casse et dommages constatés'); y += 18;
-    doc.setFontSize(9.5);
-    checkbox(M, y-9, 11, state.casse.constat==='none');
-    doc.text('Aucune casse / dommage constaté', M+16, y);
-    checkbox(M+232, y-9, 11, state.casse.constat==='some');
-    doc.text('Casse / dommage constaté (détail ci-dessous)', M+248, y);
-    y += 20;
-    bulletList(state.casse.lignes);
+    chapTitle('4. Casse et dommages constatés'); y += 16;
+    // Détail des casses mis en valeur (même style que les réserves : cadre + puces)
+    const casses = (state.casse.lignes || []).map(t=> String(t||'').trim()).filter(Boolean);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    let contentH = 0;
+    const wrapped = [];
+    if(casses.length){
+      casses.forEach(t=>{ const parts = doc.splitTextToSize(t, CW - 40); wrapped.push(parts); contentH += parts.length*13 + 5; });
+    } else {
+      contentH = 18;
+    }
+    const boxH = contentH + 14;
+    if(y + boxH > MAXY) y = newPage();
+    doc.setFillColor(250,246,240); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(1);
+    doc.roundedRect(M, y, CW, boxH, 7, 7, 'FD');
+    let yy = y + 16;
+    if(casses.length){
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(17,24,39);
+      wrapped.forEach(parts=>{
+        doc.setFillColor(RED[0],RED[1],RED[2]);
+        doc.circle(M + 12, yy - 3, 2, 'F');
+        doc.text(parts, M + 22, yy, {maxWidth: CW - 40});
+        yy += parts.length*13 + 5;
+      });
+    } else {
+      doc.setFont('helvetica','italic'); doc.setFontSize(9.5); doc.setTextColor(140,130,118);
+      doc.text('Aucune casse constatée', M + 14, yy); doc.setTextColor(17,24,39);
+    }
+    y += boxH + 12;
   }
 
   // Acceptation, réserves, notice, signatures — on n'ajoute qu'un léger espace,
@@ -1750,7 +1802,7 @@ async function generatePDF(){
   y += 10;
 
   if(state.meta.type !== 'sortant'){
-    y += 16;   // espace au-dessus du chapitre 5
+    y += 24;   // espace visible au-dessus du chapitre 5
     if(y + 56 > MAXY) y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
     chapTitle('5. Réserves éventuelles'); y += 16;
@@ -1760,15 +1812,15 @@ async function generatePDF(){
       checkbox(M, y-9, 12, !!state.reserves.raccordement);
       doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(17,24,39);
       doc.text(txt, M+18, y);
-      y += 22;   // espace suffisant sous la case
+      y += 14;   // espace réduit sous la case raccordement
     })();
     const reserves = (state.reserves.lignes || []).map(t=> String(t||'').trim()).filter(Boolean);
     // Pré-calcul de la hauteur du contenu pour dessiner un cadre de mise en valeur
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
     let contentH = 0;
     const wrapped = [];
     if(reserves.length){
-      reserves.forEach(t=>{ const parts = doc.splitTextToSize(t, CW - 30); wrapped.push(parts); contentH += parts.length*13 + 5; });
+      reserves.forEach(t=>{ const parts = doc.splitTextToSize(t, CW - 40); wrapped.push(parts); contentH += parts.length*13 + 5; });
     } else {
       contentH = 18;
     }
@@ -1783,14 +1835,14 @@ async function generatePDF(){
       wrapped.forEach(parts=>{
         doc.setFillColor(RED[0],RED[1],RED[2]);
         doc.circle(M + 12, yy - 3, 2, 'F');                 // puce ronde rouge
-        doc.text(parts, M + 22, yy);
+        doc.text(parts, M + 22, yy, {maxWidth: CW - 40});
         yy += parts.length*13 + 5;
       });
     } else {
       doc.setFont('helvetica','italic'); doc.setFontSize(9.5); doc.setTextColor(140,130,118);
       doc.text('Aucune réserve', M + 14, yy); doc.setTextColor(17,24,39);
     }
-    y += boxH + 12;
+    y += boxH + 20;   // saut de ligne au-dessus de la phrase "Monsieur ..."
 
     // Phrase contractuelle "Monsieur ..., Maitre de l'ouvrage ..." sous les réserves
     const mo = state.acceptation.maitreOuvrage || '…………………………';
