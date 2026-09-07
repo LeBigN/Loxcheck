@@ -1440,12 +1440,32 @@ async function generateDevisPDF(){
   doc.setTextColor(17,24,39);
 
   const fname = 'Devis LOXAM Module - ' + ((state.meta.client||'client').trim().replace(/[\\/:*?"<>|]/g,'-') || 'client') + '.pdf';
+  await outputPdf(doc, fname);
+}
+
+// Sortie PDF : privilégie le partage natif du FICHIER SEUL (sans URL blob parasite),
+// sinon téléchargement classique. Évite le "blob:https://loxcheck.org/..." envoyé en plus du PDF.
+async function outputPdf(doc, fname){
+  // 1) Pont Android natif si présent
   if (window.Android && window.Android.savePdf) {
     const base64 = doc.output('datauristring').split(',')[1];
     window.Android.savePdf(base64, fname);
-  } else {
-    doc.save(fname);
+    return;
   }
+  // 2) Partage natif d'un fichier (iOS/Android navigateur) — fichier uniquement, pas d'URL
+  try {
+    const blob = doc.output('blob');
+    const file = new File([blob], fname, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: fname });   // aucun champ url/text
+      return;
+    }
+  } catch (e) {
+    // annulation utilisateur ou partage indisponible -> on retombe sur le téléchargement
+    if (e && e.name === 'AbortError') return;
+  }
+  // 3) Téléchargement classique (desktop / navigateurs sans partage de fichier)
+  doc.save(fname);
 }
 
 async function generatePDF(){
@@ -1987,12 +2007,7 @@ async function generatePDF(){
   }
 
   const fname = 'PV LOXAM Module - ' + ((state.meta.client||'client').trim().replace(/[\\/:*?"<>|]/g,'-') || 'client') + '.pdf';
-  if (window.Android && window.Android.savePdf) {
-    const base64 = doc.output('datauristring').split(',')[1];
-    window.Android.savePdf(base64, fname);
-  } else {
-    doc.save(fname);
-  }
+  await outputPdf(doc, fname);
 }
 
 // ---------- INIT ----------
