@@ -167,6 +167,12 @@ input, select, textarea{ max-width:100%; min-width:0; box-sizing:border-box; }
 .photo-row{display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;}
 .ico{display:inline-block; vertical-align:middle; flex:0 0 auto;}
 .reserve-lines{display:flex; flex-direction:column; gap:8px; margin-top:4px;}
+.reserve-bloc{display:flex; flex-direction:column; gap:6px;}
+.reserve-ico{flex:0 0 auto; width:36px; height:36px; border:1px solid var(--line); background:#fff; color:var(--red-dark);
+  border-radius:8px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;}
+.reserve-ico:active{background:var(--red-tint);}
+.reserve-thumbs{display:flex; flex-wrap:wrap; gap:8px; padding-left:22px;}
+.reserve-thumbs .photo-thumb{margin:0;}
 .reserve-line{display:flex; align-items:center; gap:8px;}
 .reserve-dash{color:var(--sub); font-weight:700; flex:0 0 auto;}
 .reserve-line input{flex:1; min-width:0; border:1px solid var(--line); border-radius:9px; padding:10px 11px; font-size:15px; font-family:inherit; background:#fff; color:var(--ink);}
@@ -372,6 +378,13 @@ const MOBILIER_SMILEY_OPTS = [
 const CONDUCTEURS = ['SCOTTO Nicolas','LAOUAR Hilel'];
 // État des lieux sortant : pas de notion de réserve (démontage)
 function estSortant(){ return state.meta.type === 'sortant'; }
+// Lignes de réserve : { t: texte, photos: [] } — compatibles avec l'ancien format (chaîne)
+function resTexte(l){ return (typeof l === 'string') ? l : ((l && l.t) || ''); }
+function resPhotos(l){ return (l && Array.isArray(l.photos)) ? l.photos : []; }
+function resNormalise(arr){
+  return (Array.isArray(arr) ? arr : []).map(l => (typeof l === 'string') ? {t:l, photos:[]}
+    : {t:(l && l.t) || '', photos:(l && Array.isArray(l.photos)) ? l.photos : []});
+}
 function sansReserve(opts){ return estSortant() ? opts.filter(o=> o.v!=='avec_reserve' && o.v!=='sans_reserve') : opts; }
 const SOUS_TRAITANTS = ['CRPS','TCPP','TERMICLIM','CC BAT','EMS','CMTG','MOKRANE'];
 
@@ -438,7 +451,7 @@ const state = {
   mobilier:{},
   casse:{ constat:'none', lignes:['','',''], photos:[] },
   acceptation:{ maitreOuvrage:'', delaiJours:'' },
-  reserves:{ lignes:['','',''], raccordement:false, photos:[] },
+  reserves:{ lignes:[{t:'',photos:[]}], raccordement:false, photos:[] },
   notice:{ statut:'' }, // 'remise' | 'non_concerne'
   leveeReserve:{ effectuee:false },
   devis:{ numero:'', date:'', descriptif:'Refacturation pour dommages constat\u00e9s lors de la restitution des modules', lignes:[], km:'', email:'', remise:'' }, // lignes: {desc, qty, pu} — refacturation HT
@@ -485,9 +498,11 @@ async function loadDraft(){
       if(!Array.isArray(state.devis.lignes)) state.devis.lignes = [];
       if(state.devis.km===undefined || state.devis.km===null) state.devis.km='';
       if(state.meta.civilite===undefined) state.meta.civilite='';
-      if(!Array.isArray(state.reserves.lignes) || !state.reserves.lignes.length) state.reserves.lignes = [''];
+      if(!Array.isArray(state.reserves.lignes) || !state.reserves.lignes.length) state.reserves.lignes = [{t:'',photos:[]}];
       if(state.reserves.raccordement===undefined) state.reserves.raccordement=false;
       if(!Array.isArray(state.reserves.photos)) state.reserves.photos=[];
+      state.reserves.lignes = resNormalise(state.reserves.lignes);
+      if(!state.reserves.lignes.length) state.reserves.lignes = [{t:'',photos:[]}];
       ELECTRO_ITEMS.forEach(i=>{ if(!state.mobilier[i]) state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
       if(state.meta.type==='levee') state.meta.type='';   // type retiré
       if(state.meta.email===undefined) state.meta.email='';
@@ -570,31 +585,35 @@ function statusCheckRow(keyId, statuses, onToggle, opts){
   return row;
 }
 
+// Compression + réorientation d'une image (réutilisable partout)
+function compresserImage(file, cb){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const MAXD = 1400;
+        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+        const sc = Math.min(1, MAXD / Math.max(iw, ih));
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(iw*sc));
+        cv.height = Math.max(1, Math.round(ih*sc));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        cb(cv.toDataURL('image/jpeg', 0.85));
+      }catch(err){ cb(reader.result); }
+    };
+    img.onerror = ()=>cb(reader.result);
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function photoRow(getPhotos, onAdd, onRemove){
   const wrap = el('div',{class:'photo-row'});
 
   // Traitement commun : re-dessin canvas (oriente + compresse) puis ajout
   function ajouter(file, done){
-    const reader = new FileReader();
-    reader.onload = ()=>{
-      const img = new Image();
-      img.onload = ()=>{
-        try{
-          const MAXD = 1400;
-          const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-          const sc = Math.min(1, MAXD / Math.max(iw, ih));
-          const cv = document.createElement('canvas');
-          cv.width = Math.max(1, Math.round(iw*sc));
-          cv.height = Math.max(1, Math.round(ih*sc));
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          onAdd(cv.toDataURL('image/jpeg', 0.85));
-        }catch(err){ onAdd(reader.result); }
-        done && done();
-      };
-      img.onerror = ()=>{ onAdd(reader.result); done && done(); };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+    compresserImage(file, (src)=>{ onAdd(src); done && done(); });
   }
 
   // Bouton Appareil photo
@@ -912,25 +931,58 @@ function renderReservesSection(){
     const list = el('div',{class:'reserve-lines'});
     const rebuild = ()=>{
       list.textContent = '';
-      state.reserves.lignes.forEach((val, idx)=>{
+      state.reserves.lignes = resNormalise(state.reserves.lignes);
+      state.reserves.lignes.forEach((ligne, idx)=>{
+        const bloc = el('div',{class:'reserve-bloc'});
         const rowEl = el('div',{class:'reserve-line'});
         rowEl.append(el('span',{class:'reserve-dash'},'—'));
-        rowEl.append(el('input',{type:'text', placeholder:'Réserve…', value:val,
-          oninput:(e)=>{ state.reserves.lignes[idx] = e.target.value; }}));
+        rowEl.append(el('input',{type:'text', placeholder:'Réserve…', value:ligne.t,
+          oninput:(e)=>{ state.reserves.lignes[idx].t = e.target.value; }}));
+        // Icônes photo / galerie propres à cette ligne
+        const btnCam = el('label',{class:'reserve-ico', title:'Prendre une photo'});
+        const inCam = el('input',{type:'file', accept:'image/*', capture:'environment', style:'display:none'});
+        inCam.addEventListener('change',(e)=>{
+          const f=e.target.files[0]; if(f) compresserImage(f, (src)=>{ state.reserves.lignes[idx].photos.push(src); rebuild(); });
+          inCam.value='';
+        });
+        btnCam.innerHTML = icon('camera',15); btnCam.append(inCam);
+        const btnGal = el('label',{class:'reserve-ico', title:'Importer depuis la galerie'});
+        const inGal = el('input',{type:'file', accept:'image/*', multiple:'multiple', style:'display:none'});
+        inGal.addEventListener('change',(e)=>{
+          const fs=Array.from(e.target.files||[]); if(!fs.length) return;
+          let rest=fs.length;
+          fs.forEach(f=> compresserImage(f, (src)=>{ state.reserves.lignes[idx].photos.push(src); if(--rest===0) rebuild(); }));
+          inGal.value='';
+        });
+        btnGal.innerHTML = icon('image',15); btnGal.append(inGal);
+        rowEl.append(btnCam, btnGal);
         const del = el('button',{class:'reserve-del', title:'Supprimer', onclick:()=>{
           state.reserves.lignes.splice(idx,1);
-          if(!state.reserves.lignes.length) state.reserves.lignes = [''];
+          if(!state.reserves.lignes.length) state.reserves.lignes = [{t:'',photos:[]}];
           rebuild();
         }});
         del.innerHTML = icon('x',15);
         rowEl.append(del);
-        list.append(rowEl);
+        bloc.append(rowEl);
+        // Vignettes des photos de la ligne
+        if(ligne.photos.length){
+          const th = el('div',{class:'reserve-thumbs'});
+          ligne.photos.forEach((src, pi)=>{
+            const t = el('div',{class:'photo-thumb'},
+              el('img',{src}),
+              el('button',{class:'rm', onclick:()=>{ state.reserves.lignes[idx].photos.splice(pi,1); rebuild(); }},'×')
+            );
+            th.append(t);
+          });
+          bloc.append(th);
+        }
+        list.append(bloc);
       });
     };
     rebuild();
     c.append(list);
     const addBtn = el('button',{class:'add-line-btn', onclick:()=>{
-      state.reserves.lignes.push(''); rebuild();
+      state.reserves.lignes.push({t:'',photos:[]}); rebuild();
     }});
     addBtn.innerHTML = icon('plus',15) + '<span>Ajouter une ligne</span>';
     c.append(addBtn);
@@ -1839,7 +1891,8 @@ async function generatePDF(){
       doc.text(txt, M+18, y);
       y += 14;   // espace réduit sous la case raccordement
     })();
-    const reserves = (state.reserves.lignes || []).map(t=> String(t||'').trim()).filter(Boolean);
+    const lignesRes = resNormalise(state.reserves.lignes).filter(l=> resTexte(l).trim() || resPhotos(l).length);
+    const reserves = lignesRes.map(l=> resTexte(l).trim()).filter(Boolean);
     // Pré-calcul de la hauteur du contenu pour dessiner un cadre de mise en valeur
     doc.setFont('helvetica','bold'); doc.setFontSize(10);
     let contentH = 0;
@@ -1989,74 +2042,91 @@ async function generatePDF(){
     const it = state.mobilier[i];
     ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:false}));
   });
-  // Photos des réserves éventuelles (nouveau)
+  // Photos des réserves éventuelles : rattachées à leur ligne
   if(state.meta.type !== 'sortant'){
-    (state.reserves.photos || []).forEach(p=> annex.push({label:'Réserve éventuelle', src:p, obs:'', reserve:true}));
+    resNormalise(state.reserves.lignes).forEach((l, i)=>{
+      const txt = resTexte(l).trim();
+      resPhotos(l).forEach(p=> annex.push({
+        label: 'Réserve ' + (i+1),
+        src: p,
+        obs: txt,
+        reserve: true
+      }));
+    });
+    (state.reserves.photos || []).forEach(p=> annex.push({label:'Réserves éventuelles', src:p, obs:'', reserve:true}));
   }
   if(afficherCasse) (state.casse.photos || []).forEach(p=> annex.push({label:'Casse / dommages', src:p, obs:'', reserve:false}));
   if(annex.length){
     y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
     doc.text('Annexe photos', M, y); y += 14;
-    const colW = CW/2 - 8;          // largeur d'une colonne (2 par ligne)
-    const imgH = 150;               // hauteur image
-    let count = 0, rowTop = y, rowMaxH = 0;
+    const colW = CW/2 - 8;            // largeur de colonne (2 par ligne)
+    const imgBoxH = 150;              // hauteur FIXE de la zone image
+    const headH = 18;                 // hauteur de l'en-tête (nom + badge)
+    const capLines = 2;               // nb de lignes de légende réservées (uniforme)
+    const capH = capLines * 10 + 8;   // hauteur FIXE de la zone légende
+    const cellH = headH + imgBoxH + capH + 8;   // hauteur IDENTIQUE pour toutes les cellules
+
+    let count = 0, rowTop = y;
     annex.forEach((ph)=>{
       const col = count % 2;
       const px = M + col * (colW + 16);
-      if(col === 0){ rowTop = y; rowMaxH = 0; }
-
-      // Hauteur du bloc : en-tête (nom+badge) + image + légende observation
-      const hasObs = ph.obs && ph.obs.trim();
-      doc.setFontSize(8.5);
-      const obsLines = hasObs ? doc.splitTextToSize('Obs. : ' + ph.obs.trim(), colW - 6) : [];
-      const headH = 16;
-      const captionH = obsLines.length ? (obsLines.length*10 + 6) : 0;
-      const cellH = headH + imgH + captionH + 10;
-
-      // Saut de page si besoin (en début de ligne)
-      if(col === 0 && rowTop + cellH > MAXY){ y = newPage(); rowTop = y; }
+      if(col === 0){
+        if(rowTop + cellH > MAXY){ y = newPage(); rowTop = y; }
+      }
       const cy = rowTop;
 
-      // Cadre de la cellule : rouge clair si réserve, sable sinon (distinction visuelle)
+      // Cadre : rouge si réserve, sable sinon — dimensions strictement identiques
       if(ph.reserve){
         doc.setFillColor(252,242,244); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(1);
       } else {
-        doc.setFillColor(250,246,240); doc.setDrawColor(219,212,201); doc.setLineWidth(0.7);
+        doc.setFillColor(250,246,240); doc.setDrawColor(219,212,201); doc.setLineWidth(0.8);
       }
       doc.roundedRect(px, cy, colW, cellH, 5, 5, 'FD');
 
-      // En-tête : nom de la ligne + badge RÉSERVE
+      // En-tête : nom + badge RÉSERVE (badge toujours au même endroit)
       doc.setFont('helvetica','bold'); doc.setFontSize(8.7); doc.setTextColor(17,24,39);
-      doc.text(String(ph.label), px+7, cy+12, {maxWidth: ph.reserve ? colW-66 : colW-14});
+      const badgeW = 52;
+      doc.text(String(ph.label), px+7, cy+12, {maxWidth: colW - badgeW - 16});
       if(ph.reserve){
-        const bw = 54, bx = px + colW - bw - 6, by = cy + 4;
-        doc.setFillColor(RED[0],RED[1],RED[2]); doc.roundedRect(bx, by, bw, 12, 3, 3, 'F');
+        const bx = px + colW - badgeW - 6, by = cy + 4;
+        doc.setFillColor(RED[0],RED[1],RED[2]); doc.roundedRect(bx, by, badgeW, 12, 3, 3, 'F');
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
-        doc.text('RÉSERVE', bx + bw/2, by+8.3, {align:'center'});
+        doc.text('RÉSERVE', bx + badgeW/2, by+8.3, {align:'center'});
         doc.setTextColor(17,24,39);
       }
 
-      // Image
+      // Image : cadrée dans une zone FIXE, centrée, proportions conservées
       try{
         const fmt = /^data:image\/png/i.test(ph.src) ? 'PNG' : 'JPEG';
-        let iw = colW-12, ih = imgH;
-        try{ const pr = doc.getImageProperties(ph.src); const k = Math.min((colW-12)/pr.width, imgH/pr.height); iw=pr.width*k; ih=pr.height*k; }catch(e2){}
-        doc.addImage(ph.src, fmt, px + (colW-iw)/2, cy+headH, iw, ih);
+        const availW = colW - 14, availH = imgBoxH - 6;
+        let iw = availW, ih = availH;
+        try{
+          const pr = doc.getImageProperties(ph.src);
+          const k = Math.min(availW/pr.width, availH/pr.height);
+          iw = pr.width*k; ih = pr.height*k;
+        }catch(e2){}
+        // centrage horizontal ET vertical dans la zone image
+        doc.addImage(ph.src, fmt, px + (colW-iw)/2, cy + headH + (imgBoxH - ih)/2, iw, ih);
       }catch(e){}
 
-      // Légende : observation sous la photo
-      if(obsLines.length){
+      // Légende : observation sous la photo, tronquée à 2 lignes (hauteur uniforme)
+      const txt = (ph.obs || '').trim();
+      if(txt){
         doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,80,70);
-        doc.text(obsLines, px+7, cy+headH+imgH+11, {maxWidth: colW-12});
+        let lines = doc.splitTextToSize('Obs. : ' + txt, colW - 14);
+        if(lines.length > capLines){
+          lines = lines.slice(0, capLines);
+          lines[capLines-1] = lines[capLines-1].replace(/.{3}$/, '…');
+        }
+        doc.text(lines, px+7, cy + headH + imgBoxH + 10, {maxWidth: colW - 14});
         doc.setTextColor(17,24,39);
       }
 
-      rowMaxH = Math.max(rowMaxH, cellH);
-      if(col === 1){ y = rowTop + rowMaxH + 12; }
+      if(col === 1){ y = rowTop + cellH + 12; rowTop = y; }
       count++;
     });
-    if(count % 2 === 1){ y = rowTop + rowMaxH + 12; }   // clôturer une ligne impaire
+    if(count % 2 === 1){ y = rowTop + cellH + 12; }   // clôturer une ligne impaire
   }
 
   const fname = 'PV LOXAM Module - ' + ((state.meta.client||'client').trim().replace(/[\\/:*?"<>|]/g,'-') || 'client') + '.pdf';
