@@ -438,7 +438,7 @@ const state = {
   mobilier:{},
   casse:{ constat:'none', lignes:['','',''], photos:[] },
   acceptation:{ maitreOuvrage:'', delaiJours:'' },
-  reserves:{ lignes:['','',''], raccordement:false },
+  reserves:{ lignes:['','',''], raccordement:false, photos:[] },
   notice:{ statut:'' }, // 'remise' | 'non_concerne'
   leveeReserve:{ effectuee:false },
   devis:{ numero:'', date:'', descriptif:'Refacturation pour dommages constat\u00e9s lors de la restitution des modules', lignes:[], km:'', email:'', remise:'' }, // lignes: {desc, qty, pu} — refacturation HT
@@ -487,6 +487,7 @@ async function loadDraft(){
       if(state.meta.civilite===undefined) state.meta.civilite='';
       if(!Array.isArray(state.reserves.lignes) || !state.reserves.lignes.length) state.reserves.lignes = [''];
       if(state.reserves.raccordement===undefined) state.reserves.raccordement=false;
+      if(!Array.isArray(state.reserves.photos)) state.reserves.photos=[];
       ELECTRO_ITEMS.forEach(i=>{ if(!state.mobilier[i]) state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
       if(state.meta.type==='levee') state.meta.type='';   // type retiré
       if(state.meta.email===undefined) state.meta.email='';
@@ -933,6 +934,10 @@ function renderReservesSection(){
     }});
     addBtn.innerHTML = icon('plus',15) + '<span>Ajouter une ligne</span>';
     c.append(addBtn);
+
+    // Photos des réserves (import ou prise directe)
+    if(!Array.isArray(state.reserves.photos)) state.reserves.photos = [];
+    c.append(photoRow(()=>state.reserves.photos, (src)=>state.reserves.photos.push(src), (idx)=>state.reserves.photos.splice(idx,1)));
 
     // Phrase contractuelle "Monsieur ..., Maitre de l'ouvrage ..." (déplacée du ch.4)
     const legal = el('div',{class:'legal-block', style:'margin-top:16px;'});
@@ -1969,41 +1974,89 @@ async function generatePDF(){
     y += boxH + 6;
   }
 
-  // Annexe photos
+  // Annexe photos — chaque photo porte le nom de la ligne, son observation et son statut réserve
   const annex = [];
+  const aReserve = (it)=> !!(it && it.statuses && it.statuses.includes('avec_reserve'));
   CHECKLIST_SECTIONS.forEach(s=> s.items.forEach(i=>{
     const it = state.checklist[s.id+'|'+i];
-    ((it && it.photos) || []).forEach(p=> annex.push([i, p]));
+    ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:aReserve(it)}));
   }));
   MOBILIER_ITEMS.forEach(i=>{
     const it = state.mobilier[i];
-    ((it && it.photos) || []).forEach(p=> annex.push([i, p]));
+    ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:aReserve(it)}));
   });
-  if(afficherCasse) (state.casse.photos || []).forEach(p=> annex.push(['Casse / dommages', p]));
+  ELECTRO_ITEMS.forEach(i=>{
+    const it = state.mobilier[i];
+    ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:false}));
+  });
+  // Photos des réserves éventuelles (nouveau)
+  if(state.meta.type !== 'sortant'){
+    (state.reserves.photos || []).forEach(p=> annex.push({label:'Réserve éventuelle', src:p, obs:'', reserve:true}));
+  }
+  if(afficherCasse) (state.casse.photos || []).forEach(p=> annex.push({label:'Casse / dommages', src:p, obs:'', reserve:false}));
   if(annex.length){
     y = newPage();
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
-    doc.text('Annexe photos', M, y); y += 12;
-    let count = 0;
-    annex.forEach(([label, src])=>{
-      if(count % 2 === 0 && y + 200 > MAXY){ y = newPage(); }
-      const px = (count % 2 === 0) ? M : (M + CW/2 + 8);
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(17,24,39);
-      doc.text(String(label), px, y+12, {maxWidth:CW/2-12});
+    doc.text('Annexe photos', M, y); y += 14;
+    const colW = CW/2 - 8;          // largeur d'une colonne (2 par ligne)
+    const imgH = 150;               // hauteur image
+    let count = 0, rowTop = y, rowMaxH = 0;
+    annex.forEach((ph)=>{
+      const col = count % 2;
+      const px = M + col * (colW + 16);
+      if(col === 0){ rowTop = y; rowMaxH = 0; }
+
+      // Hauteur du bloc : en-tête (nom+badge) + image + légende observation
+      const hasObs = ph.obs && ph.obs.trim();
+      doc.setFontSize(8.5);
+      const obsLines = hasObs ? doc.splitTextToSize('Obs. : ' + ph.obs.trim(), colW - 6) : [];
+      const headH = 16;
+      const captionH = obsLines.length ? (obsLines.length*10 + 6) : 0;
+      const cellH = headH + imgH + captionH + 10;
+
+      // Saut de page si besoin (en début de ligne)
+      if(col === 0 && rowTop + cellH > MAXY){ y = newPage(); rowTop = y; }
+      const cy = rowTop;
+
+      // Cadre de la cellule : rouge clair si réserve, sable sinon (distinction visuelle)
+      if(ph.reserve){
+        doc.setFillColor(252,242,244); doc.setDrawColor(RED[0],RED[1],RED[2]); doc.setLineWidth(1);
+      } else {
+        doc.setFillColor(250,246,240); doc.setDrawColor(219,212,201); doc.setLineWidth(0.7);
+      }
+      doc.roundedRect(px, cy, colW, cellH, 5, 5, 'FD');
+
+      // En-tête : nom de la ligne + badge RÉSERVE
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.7); doc.setTextColor(17,24,39);
+      doc.text(String(ph.label), px+7, cy+12, {maxWidth: ph.reserve ? colW-66 : colW-14});
+      if(ph.reserve){
+        const bw = 54, bx = px + colW - bw - 6, by = cy + 4;
+        doc.setFillColor(RED[0],RED[1],RED[2]); doc.roundedRect(bx, by, bw, 12, 3, 3, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
+        doc.text('RÉSERVE', bx + bw/2, by+8.3, {align:'center'});
+        doc.setTextColor(17,24,39);
+      }
+
+      // Image
       try{
-        const fmt = /^data:image\/png/i.test(src) ? 'PNG' : 'JPEG';
-        const boxW = CW/2-14, boxH = 160;
-        let iw = boxW, ih = boxH;
-        try{
-          const pr = doc.getImageProperties(src);
-          const k = Math.min(boxW/pr.width, boxH/pr.height);
-          iw = pr.width*k; ih = pr.height*k;
-        }catch(e2){}
-        doc.addImage(src, fmt, px + (boxW-iw)/2, y+18, iw, ih);
+        const fmt = /^data:image\/png/i.test(ph.src) ? 'PNG' : 'JPEG';
+        let iw = colW-12, ih = imgH;
+        try{ const pr = doc.getImageProperties(ph.src); const k = Math.min((colW-12)/pr.width, imgH/pr.height); iw=pr.width*k; ih=pr.height*k; }catch(e2){}
+        doc.addImage(ph.src, fmt, px + (colW-iw)/2, cy+headH, iw, ih);
       }catch(e){}
-      if(count % 2 === 1) y += 198;
+
+      // Légende : observation sous la photo
+      if(obsLines.length){
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,80,70);
+        doc.text(obsLines, px+7, cy+headH+imgH+11, {maxWidth: colW-12});
+        doc.setTextColor(17,24,39);
+      }
+
+      rowMaxH = Math.max(rowMaxH, cellH);
+      if(col === 1){ y = rowTop + rowMaxH + 12; }
       count++;
     });
+    if(count % 2 === 1){ y = rowTop + rowMaxH + 12; }   // clôturer une ligne impaire
   }
 
   const fname = 'PV LOXAM Module - ' + ((state.meta.client||'client').trim().replace(/[\\/:*?"<>|]/g,'-') || 'client') + '.pdf';
