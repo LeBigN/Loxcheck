@@ -1516,7 +1516,7 @@ async function outputPdf(doc, fname){
     const blob = doc.output('blob');
     const file = new File([blob], fname, { type: 'application/pdf' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: fname });   // aucun champ url/text
+      await navigator.share({ files: [file] });   // fichier SEUL : ni titre, ni texte, ni URL
       return;
     }
   } catch (e) {
