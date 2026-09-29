@@ -158,6 +158,10 @@ input, select, textarea{ max-width:100%; min-width:0; box-sizing:border-box; }
 .item{border-top:1px solid var(--line); padding:12px 0;}
 .item:first-of-type{border-top:none; padding-top:2px;}
 .item-title{font-size:14.5px; font-weight:600; margin-bottom:8px;}
+.mob-head{display:flex; align-items:center; gap:10px; margin-bottom:8px; cursor:pointer;}
+.mob-head input{width:20px; height:20px; accent-color:var(--red); flex:0 0 auto; margin:0; cursor:pointer;}
+.mob-head span{font-size:14.5px; font-weight:600;}
+.mob-head.off span{color:var(--sub); font-weight:500;}
 .item-qty{margin-bottom:8px;}
 .item-qty input{width:100px; border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:14px;}
 .item-obs{margin-top:8px;}
@@ -393,6 +397,7 @@ function sansReserve(opts){ return estSortant() ? opts.filter(o=> o.v!=='avec_re
 const SOUS_TRAITANTS = ['CRPS','TCPP','TERMICLIM','CC BAT','EMS','CMTG','MOKRANE'];
 
 // ==== Refacturation SAV : prix HT fourniture et pose (grille agence — ajustable) ====
+function fmtPrixSav(v){ return (Math.round(v*100)%100===0) ? String(Math.round(v)) : v.toFixed(2).replace('.',','); }
 const PRIX_SAV = [
   {cat:'Préfabriqué', items:[
     ['Panneau plein de 1,2m',244], ['Panneau plein de 0,9m',194], ['Panneau fenêtre standard',1672],
@@ -413,7 +418,14 @@ const PRIX_SAV = [
   {cat:'Plomberie / Sanitaire', items:[
     ['Chauffe-eau 15 litres',368], ['Chauffe-eau 300 litres',954], ['Limiteur de pression',103],
     ['Robinet mélangeur douche',267], ['Robinet mélangeur lavabo / évier',229], ['Ventilation mécanique VMC',374],
-    ['Rideau de douche',53], ['Flexible et pomme de douche',65], ['Abattant WC',46]
+    ['Rideau de douche',53], ['Flexible et pomme de douche',65], ['Abattant WC',46],
+    ['Kit meuble évier',980]
+  ]},
+  {cat:'Mobilier', items:[
+    ['Armoire de bureau',177.71], ['Armoire vestiaire double',140.95], ['Banc',36],
+    ['Bureau',145.54], ['Caisson de bureau',107], ['Chaise coquille',13.54],
+    ['Chaise dactylo',65.58], ['Chaise visiteur',25.44], ['Fauteuil',99],
+    ['Plateau de table',39.63], ['Réfrigérateur',167.55]
   ]},
   {cat:'Climatisation / Chauffage', items:[
     ['Trappe clim',241], ['Remplacement climatiseur 2600W',742], ['Remplacement pompe à chaleur 2000W',1036],
@@ -439,12 +451,12 @@ const CHECKLIST_SECTIONS = [
     'Propreté intérieure','Propreté extérieure','Revetement de sols'
   ]},
   { id:'structure', num:'2', title:'2. État des panneaux et structure', items:[
-    'Panneaux extérieurs','Panneaux intérieurs','Lames de plafond','Ossature','Portes','Fenêtres',
-    'Serrures, poignées','Éclairage','Chauffage / climatisation','Sanitaires',
-    'Escalier(s), Cage(s)','Palier(s)','Rampe(s) PMR','Garde-corps','Échelle a crinoline'
+    'Panneaux extérieurs','Panneaux intérieurs','Lames de plafond','Menuiseries',
+    'Sanitaires','Métalleries'
   ]},
 ];
 
+function mobilierActif(i){ const it = state.mobilier[i]; return !!(it && it.actif); }
 const MOBILIER_ITEMS = ['Table(s)','Chaise(s)','Chaise(s) tissu','Armoire(s) vestiaire','Banc(s)','Armoire(s) bureau','Caisson(s)'];
 const ELECTRO_ITEMS = ['Électroménager'];
 const ELECTRO_OPTS = [ {v:'livre', l:'Livré'}, {v:'non_livre', l:'Non livré'} ];
@@ -469,7 +481,7 @@ const state = {
 CHECKLIST_SECTIONS.forEach(s => s.items.forEach(i => {
   state.checklist[s.id+'|'+i] = { statuses:[], obs:'', photos:[] };
 }));
-MOBILIER_ITEMS.forEach(i => { state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
+MOBILIER_ITEMS.forEach(i => { state.mobilier[i] = { actif:false, qty:'', statuses:[], obs:'', photos:[] }; });
 ELECTRO_ITEMS.forEach(i => { state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
 
 // Snapshot of the empty fiche, used to fully reset the form.
@@ -510,6 +522,20 @@ async function loadDraft(){
       state.reserves.lignes = resNormalise(state.reserves.lignes);
       if(!state.reserves.lignes.length) state.reserves.lignes = [{t:'',photos:[]}];
       ELECTRO_ITEMS.forEach(i=>{ if(!state.mobilier[i]) state.mobilier[i] = { qty:'', statuses:[], obs:'', photos:[] }; });
+      // Chapitre 2 allégé : on écarte les lignes qui n'existent plus
+      {
+        const clesValides = {};
+        CHECKLIST_SECTIONS.forEach(sec=> sec.items.forEach(it=> clesValides[sec.id+'|'+it]=1));
+        Object.keys(state.checklist).forEach(k=>{ if(!clesValides[k]) delete state.checklist[k]; });
+      }
+      // Mobilier : les anciennes fiches n'ont pas de drapeau « actif »
+      MOBILIER_ITEMS.forEach(i=>{
+        const it = state.mobilier[i];
+        if(!it){ state.mobilier[i] = { actif:false, qty:'', statuses:[], obs:'', photos:[] }; return; }
+        if(typeof it.actif !== 'boolean'){
+          it.actif = !!((it.statuses && it.statuses.length) || String(it.qty||'').trim() || String(it.obs||'').trim() || (it.photos && it.photos.length));
+        }
+      });
       if(state.meta.type==='levee') state.meta.type='';   // type retiré
       if(state.meta.email===undefined) state.meta.email='';
       if(state.devis.email===undefined) state.devis.email = state.meta.email || '';
@@ -659,11 +685,24 @@ function photoRow(getPhotos, onAdd, onRemove){
   return wrap;
 }
 
-function renderChecklistItem(key, storeObj, showQty, opts){
+function renderChecklistItem(key, storeObj, showQty, opts, toggleable){
   const data = storeObj[key];
   const label = key.includes('|') ? key.split('|')[1] : key;
   const item = el('div',{class:'item'});
-  item.append(el('div',{class:'item-title'}, label));
+  if(toggleable){
+    // Mobilier : la ligne n'apparaît (app + PDF) que si la case est cochée
+    const cb = el('input',{type:'checkbox', ...(data.actif ? {checked:'checked'} : {})});
+    cb.addEventListener('change', ()=>{
+      data.actif = cb.checked;
+      if(!data.actif){ data.qty=''; data.statuses=[]; data.obs=''; data.photos=[]; }
+      updateProgress(); renderAll();
+    });
+    const head = el('label',{class:'mob-head' + (data.actif ? '' : ' off')}, cb, el('span', label));
+    item.append(head);
+    if(!data.actif) return item;
+  } else {
+    item.append(el('div',{class:'item-title'}, label));
+  }
   if(showQty){
     item.append(el('div',{class:'item-qty'},
       el('label',{style:'font-size:11.5px;color:var(--sub);font-weight:600;margin-bottom:3px;display:block;'},'Quantité'),
@@ -870,7 +909,7 @@ function renderClesSection(){
     (()=>{ const t=el('div',{class:'keys-title'}); t.innerHTML=icon('key',16)+'<span>Clés</span>'; return t; })(),
     keysGrid
   ));
-  MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, estSortant() ? MOBILIER_SMILEY_OPTS : sansReserve(STATUS_OPTS))));
+  MOBILIER_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, true, estSortant() ? MOBILIER_SMILEY_OPTS : sansReserve(STATUS_OPTS), true)));
   // Électroménager : cases Livré / Non livré + photo
   ELECTRO_ITEMS.forEach(i => c.append(renderChecklistItem(i, state.mobilier, false, ELECTRO_OPTS)));
   return c;
@@ -1205,9 +1244,12 @@ function renderAll(){
 }
 
 function updateProgress(){
-  const all = Object.values(state.checklist).concat(Object.values(state.mobilier));
+  const mobCount = [];
+  MOBILIER_ITEMS.forEach(i=>{ if(mobilierActif(i)) mobCount.push(state.mobilier[i]); });
+  ELECTRO_ITEMS.forEach(i=>{ if(state.mobilier[i]) mobCount.push(state.mobilier[i]); });
+  const all = Object.values(state.checklist).concat(mobCount);
   const done = all.filter(i=>i.statuses && i.statuses.length).length;
-  const pct = Math.round((done/all.length)*100);
+  const pct = all.length ? Math.round((done/all.length)*100) : 0;
   document.getElementById('progressFill').style.width = pct+'%';
 }
 // ---------- PDF EXPORT ----------
@@ -1245,7 +1287,7 @@ function renderDevisSection(){
   sel.append(el('option',{value:''},'\u2014 Refacturation \u2014'));
   PRIX_SAV.forEach((grp,gi)=>{
     const og = el('optgroup',{label:grp.cat});
-    grp.items.forEach((it,ii)=> og.append(el('option',{value:gi+'|'+ii}, it[0]+' \u2014 '+it[1]+' \u20ac')));
+    grp.items.forEach((it,ii)=> og.append(el('option',{value:gi+'|'+ii}, it[0]+' \u2014 '+fmtPrixSav(it[1])+' \u20ac')));
     sel.append(og);
   });
   const addBtn = el('button',{class:'mini-btn red', onclick:()=>{
@@ -1353,6 +1395,7 @@ function importReservesDansDevis(){
     if(bad.length) out.push('- '+i+' ('+bad.map(b=>lbl[b]).join(', ')+')'+(it.obs ? ' : '+it.obs : ''));
   }));
   Object.entries(state.mobilier).forEach(([i,it])=>{
+    if(MOBILIER_ITEMS.indexOf(i) !== -1 && !mobilierActif(i)) return;
     const bad = (it.statuses||[]).filter(x=> x==='avec_reserve');
     if(bad.length) out.push('- '+i+' (avec r\u00e9serve)'+(it.obs ? ' : '+it.obs : ''));
   });
@@ -1857,12 +1900,14 @@ async function generatePDF(){
     {w:44, t2:['AVEC','RÉS.'], k:2}, {w:44, t2:['SANS','RÉS.'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
   ];
   const mobKeys = estSortant() ? ['ok','nok'] : ['neuf','occasion','avec_reserve','sans_reserve'];
-  const mobRows = MOBILIER_ITEMS.map(i=>{
+  const mobRows = MOBILIER_ITEMS.filter(i=> mobilierActif(i)).map(i=>{
     const it = state.mobilier[i] || {qty:'',statuses:[],obs:''};
     return { name:i, qty:it.qty, obs:it.obs, checks: mobKeys.map(k=> (it.statuses||[]).includes(k)) };
-  }).filter(r=> r.checks.some(Boolean) || (r.qty && String(r.qty).trim()) || (r.obs && r.obs.trim()));
-  y = statusTable(y, colsMob, mobRows);
-  y += 14;
+  });
+  if(mobRows.length){
+    y = statusTable(y, colsMob, mobRows);
+    y += 14;
+  }
 
   // Électroménager : colonnes Livré / Non livré
   const electroRows = ELECTRO_ITEMS.map(i=>{
@@ -2111,6 +2156,7 @@ async function generatePDF(){
     ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:aReserve(it)}));
   }));
   MOBILIER_ITEMS.forEach(i=>{
+    if(!mobilierActif(i)) return;
     const it = state.mobilier[i];
     ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:aReserve(it)}));
   });
