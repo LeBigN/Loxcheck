@@ -46,6 +46,7 @@ if (!window.storage) {
   --neuf:#1E9E5A;
   --occasion:#2C6FB0;
   --avec-reserve:#C6362E;
+  --neutre:#F28C1B;
   --sans-reserve:#8891A0;
   --gold:#E8A812;
 }
@@ -112,6 +113,8 @@ input, select, textarea{ max-width:100%; min-width:0; box-sizing:border-box; }
 .radio-row input{display:none;}
 .radio-row label.st-ok{border-color:var(--neuf); color:var(--neuf);}
 .radio-row input:checked + label.st-ok{background:var(--neuf); color:#fff;}
+.radio-row label.st-neutre{border-color:var(--neutre); color:var(--neutre);}
+.radio-row input:checked + label.st-neutre{background:var(--neutre); color:#fff;}
 .radio-row label.st-nok{border-color:var(--avec-reserve); color:var(--avec-reserve);}
 .radio-row input:checked + label.st-nok{background:var(--avec-reserve); color:#fff;}
 .radio-row label.st-neuf{border-color:var(--neuf); color:var(--neuf);}
@@ -378,9 +381,13 @@ function icon(name, size){
 const SMILEY_OK = '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3.2"/><circle cx="17" cy="19" r="2.7" fill="currentColor"/><circle cx="31" cy="19" r="2.7" fill="currentColor"/><path d="M15.5 29c2.4 3.6 5.6 5.2 8.5 5.2s6.1-1.6 8.5-5.2" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 const SMILEY_NOK = '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3.2"/><circle cx="17" cy="19" r="2.7" fill="currentColor"/><circle cx="31" cy="19" r="2.7" fill="currentColor"/><path d="M15.5 34c2.4-3.6 5.6-5.2 8.5-5.2s6.1 1.6 8.5 5.2" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
 
-// Chapitres 1 & 2 : smiley vert (conforme) / smiley rouge (non conforme) + réserves
+// Smiley neutre : bouche droite (couleur orange via CSS / PDF)
+const SMILEY_NEUTRE = '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3.2"/><circle cx="17" cy="19" r="2.7" fill="currentColor"/><circle cx="31" cy="19" r="2.7" fill="currentColor"/><path d="M16 31.5h16" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>';
+
+// Chapitres 1 & 2 : smiley vert (conforme) / smiley orange (neutre) / smiley rouge (non conforme) + réserves
 const CHECK_OPTS = [
   {v:'ok', svg:SMILEY_OK},
+  {v:'neutre', svg:SMILEY_NEUTRE},
   {v:'nok', svg:SMILEY_NOK},
   {v:'avec_reserve', l:'Avec réserve'},
   {v:'sans_reserve', l:'Sans réserve'}
@@ -393,6 +400,7 @@ const STATUS_OPTS = [
 // Mobilier en état des lieux sortant : smileys (content / pas content) comme la propreté
 const MOBILIER_SMILEY_OPTS = [
   {v:'ok', svg:SMILEY_OK},
+  {v:'neutre', svg:SMILEY_NEUTRE},
   {v:'nok', svg:SMILEY_NOK}
 ];
 const CONDUCTEURS = ['SCOTTO Nicolas','LAOUAR Hilel'];
@@ -621,9 +629,10 @@ function el(tag, attrs={}, ...children){
 }
 
 // Paires exclusives : cocher l'un décoche l'autre (max 2 cases par ligne : état + réserve)
+const STATUS_GROUPES = [ ['ok','neutre','nok'], ['neuf','occasion'], ['avec_reserve','sans_reserve'], ['livre','non_livre'] ];
 const STATUS_PAIRES = { ok:'nok', nok:'ok', neuf:'occasion', occasion:'neuf',
                         avec_reserve:'sans_reserve', sans_reserve:'avec_reserve',
-                        livre:'non_livre', non_livre:'livre' };
+                        livre:'non_livre', non_livre:'livre' };   // conservé pour compatibilité
 
 function statusCheckRow(keyId, statuses, onToggle, opts){
   const row = el('div',{class:'radio-row'});
@@ -633,11 +642,11 @@ function statusCheckRow(keyId, statuses, onToggle, opts){
     const input = el('input',{type:'checkbox', id, ...(checked?{checked:'checked'}:{}) });
     input.addEventListener('change', ()=>{
       if(input.checked){
-        const autre = STATUS_PAIRES[opt.v];
-        if(autre){
+        const groupe = STATUS_GROUPES.find(g=> g.includes(opt.v)) || [];
+        groupe.filter(v=> v !== opt.v).forEach(autre=>{
           const sib = row.querySelector('input[id="'+keyId+'-'+autre+'"]');
           if(sib && sib.checked){ sib.checked = false; onToggle(autre, false); }
-        }
+        });
       }
       onToggle(opt.v, input.checked);
     });
@@ -743,7 +752,7 @@ function renderChecklistItem(key, storeObj, showQty, opts, toggleable){
   }
   // Pour les chapitres à smiley : les cases "Avec/Sans réserve" ne s'affichent
   // que si le smiley "pas content" (nok) est sélectionné.
-  const aSmiley = (opts||STATUS_OPTS).some(o=> o.v==='ok' || o.v==='nok');
+  const aSmiley = (opts||STATUS_OPTS).some(o=> o.v==='ok' || o.v==='neutre' || o.v==='nok');
   // Pour le mobilier (Neuf/Occasion) : les cases réserve n'apparaissent que si "Occasion".
   const aNeufOccasion = (opts||STATUS_OPTS).some(o=> o.v==='neuf' || o.v==='occasion');
   let optsAffichees = opts;
@@ -768,7 +777,7 @@ function renderChecklistItem(key, storeObj, showQty, opts, toggleable){
     if(on){ if(!data.statuses.includes(v)) data.statuses.push(v); }
     else { data.statuses = data.statuses.filter(x=>x!==v); }
     // Recalcule l'affichage des cases réserve quand on change de smiley ou de Neuf/Occasion
-    if(v==='ok' || v==='nok' || v==='neuf' || v==='occasion'){ updateProgress(); renderAll(); return; }
+    if(v==='ok' || v==='neutre' || v==='nok' || v==='neuf' || v==='occasion'){ updateProgress(); renderAll(); return; }
     updateProgress();
   }, optsAffichees));
   item.append(el('div',{class:'item-obs'},
@@ -1284,9 +1293,9 @@ function updateProgress(){
   document.getElementById('progressFill').style.width = pct+'%';
 }
 // ---------- PDF EXPORT ----------
-const STATUS_LABEL = {ok:'Conforme', nok:'Non conforme', neuf:'Neuf', occasion:'Occasion', avec_reserve:'Avec réserve', sans_reserve:'Sans réserve'};
+const STATUS_LABEL = {ok:'Conforme', neutre:'Neutre', nok:'Non conforme', neuf:'Neuf', occasion:'Occasion', avec_reserve:'Avec réserve', sans_reserve:'Sans réserve'};
 const STATUS_PDF_COLORS = {
-  ok:[30,158,90], nok:[198,54,46], neuf:[30,158,90], occasion:[44,111,176], avec_reserve:[198,54,46], sans_reserve:[136,145,160]
+  ok:[30,158,90], neutre:[242,140,27], nok:[198,54,46], neuf:[30,158,90], occasion:[44,111,176], avec_reserve:[198,54,46], sans_reserve:[136,145,160]
 };
 
 function renderDevisSection(){
@@ -1706,6 +1715,7 @@ async function generatePDF(){
   }
   function colColor(c){
     if(c.smiley === true) return [30,158,90];
+    if(c.smiley === 'neutre') return [242,140,27];
     if(c.smiley === false) return [198,54,46];
     const t = ((c.t2 ? c.t2.join(' ') : (c.t||''))+'').toUpperCase();
     if(t.indexOf('NEUF')>-1) return [30,158,90];
@@ -1718,7 +1728,9 @@ async function generatePDF(){
     doc.circle(cx, cy, r, 'S');
     doc.circle(cx-r*0.36, cy-r*0.3, r*0.16, 'F');
     doc.circle(cx+r*0.36, cy-r*0.3, r*0.16, 'F');
-    if(happy){
+    if(happy === 'neutre'){
+      doc.line(cx-r*0.45, cy+r*0.45, cx+r*0.45, cy+r*0.45);
+    } else if(happy){
       doc.lines([[r*0.25, r*0.42, r*0.65, r*0.42, r*0.9, 0]], cx-r*0.45, cy+r*0.12, [1,1], 'S');
     } else {
       doc.lines([[r*0.25, -r*0.42, r*0.65, -r*0.42, r*0.9, 0]], cx-r*0.45, cy+r*0.5, [1,1], 'S');
@@ -1876,13 +1888,13 @@ async function generatePDF(){
 
   // Chapitres 1 & 2 (smileys)
   const colsSmiley = estSortant() ? [
-    {w:190, t:'Élément'}, {w:56, smiley:true, k:0}, {w:56, smiley:false, k:1},
-    {w:201, t:'OBSERVATIONS', isObs:true}
+    {w:160, t:'Élément'}, {w:48, smiley:true, k:0}, {w:48, smiley:'neutre', k:1}, {w:48, smiley:false, k:2},
+    {w:199, t:'OBSERVATIONS', isObs:true}
   ] : [
-    {w:150, t:'Élément'}, {w:46, smiley:true, k:0}, {w:46, smiley:false, k:1},
-    {w:52, t2:['AVEC','RÉSERVE'], k:2}, {w:52, t2:['SANS','RÉSERVE'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
+    {w:130, t:'Élément'}, {w:42, smiley:true, k:0}, {w:42, smiley:'neutre', k:1}, {w:42, smiley:false, k:2},
+    {w:52, t2:['AVEC','RÉSERVE'], k:3}, {w:52, t2:['SANS','RÉSERVE'], k:4}, {w:143, t:'OBSERVATIONS', isObs:true}
   ];
-  const stKeys = ['ok','nok','avec_reserve','sans_reserve'];
+  const stKeys = ['ok','neutre','nok','avec_reserve','sans_reserve'];
   function rowsFor(sec){
     const rows = sec.items.map(i=>{
       const it = state.checklist[sec.id+'|'+i] || {statuses:[],obs:''};
@@ -1923,14 +1935,14 @@ async function generatePDF(){
 
   const colsMob = estSortant() ? [
     {w:150, t:'Mobilier / accessoire'}, {w:60, t:'QUANTITÉ', isQty:true},
-    {w:56, smiley:true, k:0}, {w:56, smiley:false, k:1},
-    {w:181, t:'OBSERVATIONS', isObs:true}
+    {w:48, smiley:true, k:0}, {w:48, smiley:'neutre', k:1}, {w:48, smiley:false, k:2},
+    {w:149, t:'OBSERVATIONS', isObs:true}
   ] : [
     {w:118, t:'Mobilier / accessoire'}, {w:52, t:'QUANTITÉ', isQty:true},
     {w:44, t:'NEUF', k:0}, {w:44, t:'OCCASION', k:1},
     {w:44, t2:['AVEC','RÉS.'], k:2}, {w:44, t2:['SANS','RÉS.'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
   ];
-  const mobKeys = estSortant() ? ['ok','nok'] : ['neuf','occasion','avec_reserve','sans_reserve'];
+  const mobKeys = estSortant() ? ['ok','neutre','nok'] : ['neuf','occasion','avec_reserve','sans_reserve'];
   const mobRows = MOBILIER_ITEMS.filter(i=> mobilierActif(i)).map(i=>{
     const it = state.mobilier[i] || {qty:'',statuses:[],obs:''};
     return { name:i, qty:it.qty, obs:it.obs, checks: mobKeys.map(k=> (it.statuses||[]).includes(k)) };
@@ -2086,6 +2098,8 @@ async function generatePDF(){
   if(!estSortant()){
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5);
   const noticeLines = doc.splitTextToSize("En cas de vente, la notice d'entretien et de maintenance est remise au client.", 326);
+  // Garde-fou : la notice ne doit jamais chevaucher le pied de page (saut de page si besoin)
+  if(y + Math.max(1, noticeLines.length) * 13 + 14 > MAXY){ y = newPage(); doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5); }
   doc.text(noticeLines, M, y);
   const wNC = doc.getTextWidth('Non concerné');
   const xNC = W - M - wNC - 16;
@@ -2246,13 +2260,17 @@ async function generatePDF(){
 
       // En-tête : nom + badge RÉSERVE (badge toujours au même endroit)
       doc.setFont('helvetica','bold'); doc.setFontSize(8.7); doc.setTextColor(17,24,39);
-      const badgeW = 52;
+      // État des lieux sortant : les encadrés rouges portent « DÉGRADATION » (et non « RÉSERVE »)
+      const badgeTxt = (state.meta.type === 'sortant') ? 'DÉGRADATION' : 'RÉSERVE';
+      doc.setFont('helvetica','bold'); doc.setFontSize(7);
+      const badgeW = Math.ceil(doc.getTextWidth(badgeTxt)) + 14;     // largeur ajustée au texte
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.7); doc.setTextColor(17,24,39);
       doc.text(String(ph.label), px+7, cy+12, {maxWidth: colW - badgeW - 16});
       if(ph.reserve){
         const bx = px + colW - badgeW - 6, by = cy + 4;
         doc.setFillColor(RED[0],RED[1],RED[2]); doc.roundedRect(bx, by, badgeW, 12, 3, 3, 'F');
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
-        doc.text('RÉSERVE', bx + badgeW/2, by+8.3, {align:'center'});
+        doc.text(badgeTxt, bx + badgeW/2, by+8.3, {align:'center'});
         doc.setTextColor(17,24,39);
       }
 
