@@ -780,6 +780,8 @@ function renderChecklistItem(key, storeObj, showQty, opts, toggleable){
     if(v==='ok' || v==='neutre' || v==='nok' || v==='neuf' || v==='occasion'){ updateProgress(); renderAll(); return; }
     updateProgress();
   }, optsAffichees));
+  // Mobilier : ni observation ni photo / galerie (seules la quantité et l'état sont saisis)
+  if(toggleable && MOBILIER_ITEMS.indexOf(key) !== -1) return item;
   item.append(el('div',{class:'item-obs'},
     el('input',{type:'text', placeholder:'Observation (optionnel)', value:data.obs,
       oninput:(e)=>{ data.obs = e.target.value; } })
@@ -1945,7 +1947,7 @@ async function generatePDF(){
   const mobKeys = estSortant() ? ['ok','neutre','nok'] : ['neuf','occasion','avec_reserve','sans_reserve'];
   const mobRows = MOBILIER_ITEMS.filter(i=> mobilierActif(i)).map(i=>{
     const it = state.mobilier[i] || {qty:'',statuses:[],obs:''};
-    return { name:i, qty:it.qty, obs:it.obs, checks: mobKeys.map(k=> (it.statuses||[]).includes(k)) };
+    return { name:i, qty:it.qty, obs:'', checks: mobKeys.map(k=> (it.statuses||[]).includes(k)) };
   });
   if(mobRows.length){
     y = statusTable(y, colsMob, mobRows);
@@ -2200,11 +2202,7 @@ async function generatePDF(){
     const it = state.checklist[s.id+'|'+i];
     ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:aReserve(it)}));
   }));
-  MOBILIER_ITEMS.forEach(i=>{
-    if(!mobilierActif(i)) return;
-    const it = state.mobilier[i];
-    ((it && it.photos) || []).forEach(p=> annex.push({label:i, src:p, obs:(it&&it.obs)||'', reserve:aReserve(it)}));
-  });
+  // Mobilier : plus de photos (les anciennes éventuelles ne sont plus reprises)
   ELECTRO_ITEMS.forEach(i=>{
     if(!electroActif(i)) return;
     const it = state.mobilier[i];
