@@ -658,26 +658,64 @@ function statusCheckRow(keyId, statuses, onToggle, opts){
 }
 
 // Compression + réorientation d'une image (réutilisable partout)
-function compresserImage(file, cb){
-  const reader = new FileReader();
-  reader.onload = ()=>{
+// Décode un fichier image : <img> (orientation EXIF auto) puis createImageBitmap
+function decoderFichierImage(file){
+  return new Promise((resolve)=>{
+    let url = null;
+    try{ url = URL.createObjectURL(file); }catch(e){ return resolve(null); }
     const img = new Image();
-    img.onload = ()=>{
-      try{
-        const MAXD = 1400;
-        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-        const sc = Math.min(1, MAXD / Math.max(iw, ih));
-        const cv = document.createElement('canvas');
-        cv.width = Math.max(1, Math.round(iw*sc));
-        cv.height = Math.max(1, Math.round(ih*sc));
-        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-        cb(cv.toDataURL('image/jpeg', 0.85));
-      }catch(err){ cb(reader.result); }
+    img.onload = ()=> resolve({ src:img, w:img.naturalWidth||img.width, h:img.naturalHeight||img.height, done:()=>{ try{URL.revokeObjectURL(url);}catch(e){} } });
+    img.onerror = async ()=>{
+      try{ URL.revokeObjectURL(url); }catch(e){}
+      if(window.createImageBitmap){
+        try{ const bmp = await createImageBitmap(file); return resolve({ src:bmp, w:bmp.width, h:bmp.height, done:()=>{ try{bmp.close();}catch(e){} } }); }catch(e2){}
+      }
+      resolve(null);
     };
-    img.onerror = ()=>cb(reader.result);
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
+    img.src = url;
+  });
+}
+function estFichierHeic(file){
+  const n = (file.name||'').toLowerCase(), t = (file.type||'').toLowerCase();
+  return /hei[cf]/.test(t) || /\.(heic|heif)$/.test(n) || t === '';
+}
+// Convertisseur HEIC/HEIF : chargé à la demande (Chrome / Firefox ne lisent pas le HEIC des iPhone / Mac)
+function chargerHeic2any(){
+  return new Promise((res, rej)=>{
+    if(window.heic2any) return res(window.heic2any);
+    const sc = document.createElement('script');
+    sc.src = 'vendor/heic2any.min.js';
+    sc.onload = ()=> window.heic2any ? res(window.heic2any) : rej(new Error('heic2any'));
+    sc.onerror = ()=> rej(new Error('heic2any'));
+    document.head.appendChild(sc);
+  });
+}
+// Compression + réorientation. Appelle cb(dataURL JPEG) ou cb(null) si l'image est illisible
+// (on n'enregistre JAMAIS un fichier brut non affichable : il donnait des cadres vides dans le PDF).
+async function compresserImage(file, cb){
+  try{
+    let dec = await decoderFichierImage(file);
+    if(!dec && estFichierHeic(file)){
+      const h2a = await chargerHeic2any();
+      let out = await h2a({ blob:file, toType:'image/jpeg', quality:0.9 });
+      if(Array.isArray(out)) out = out[0];
+      dec = await decoderFichierImage(out);
+    }
+    if(!dec || !dec.w || !dec.h){ cb(null); return; }
+    const MAXD = 1400;
+    const sc = Math.min(1, MAXD / Math.max(dec.w, dec.h));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(dec.w*sc));
+    cv.height = Math.max(1, Math.round(dec.h*sc));
+    const cx = cv.getContext('2d');
+    cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);   // fond blanc (PNG transparents)
+    cx.drawImage(dec.src, 0, 0, cv.width, cv.height);
+    dec.done && dec.done();
+    cb(cv.toDataURL('image/jpeg', 0.85));
+  }catch(err){ cb(null); }
+}
+function avertirImageIllisible(nb){
+  showToast(nb > 1 ? (nb + ' images illisibles ignorées (format non pris en charge)') : 'Image illisible ignorée (format non pris en charge)');
 }
 
 function photoRow(getPhotos, onAdd, onRemove){
@@ -685,7 +723,7 @@ function photoRow(getPhotos, onAdd, onRemove){
 
   // Traitement commun : re-dessin canvas (oriente + compresse) puis ajout
   function ajouter(file, done){
-    compresserImage(file, (src)=>{ onAdd(src); done && done(); });
+    compresserImage(file, (src)=>{ if(src) onAdd(src); else avertirImageIllisible(1); done && done(); });
   }
 
   // Bouton Appareil photo
@@ -987,7 +1025,7 @@ function renderCasseSection(){
         const btnCam = el('label',{class:'reserve-ico', title:'Prendre une photo'});
         const inCam = el('input',{type:'file', accept:'image/*', capture:'environment', style:'display:none'});
         inCam.addEventListener('change',(e)=>{
-          const f=e.target.files[0]; if(f) compresserImage(f,(src)=>{ state.casse.lignes[idx].photos.push(src); rebuild(); });
+          const f=e.target.files[0]; if(f) compresserImage(f,(src)=>{ if(src) state.casse.lignes[idx].photos.push(src); else avertirImageIllisible(1); rebuild(); });
           inCam.value='';
         });
         btnCam.innerHTML = icon('camera',15); btnCam.append(inCam);
@@ -996,7 +1034,7 @@ function renderCasseSection(){
         inGal.addEventListener('change',(e)=>{
           const fs2=Array.from(e.target.files||[]); if(!fs2.length) return;
           let rest=fs2.length;
-          fs2.forEach(f=> compresserImage(f,(src)=>{ state.casse.lignes[idx].photos.push(src); if(--rest===0) rebuild(); }));
+          fs2.forEach(f=> compresserImage(f,(src)=>{ if(src) state.casse.lignes[idx].photos.push(src); else avertirImageIllisible(1); if(--rest===0) rebuild(); }));
           inGal.value='';
         });
         btnGal.innerHTML = icon('image',15); btnGal.append(inGal);
@@ -1065,7 +1103,7 @@ function renderReservesSection(){
         const btnCam = el('label',{class:'reserve-ico', title:'Prendre une photo'});
         const inCam = el('input',{type:'file', accept:'image/*', capture:'environment', style:'display:none'});
         inCam.addEventListener('change',(e)=>{
-          const f=e.target.files[0]; if(f) compresserImage(f, (src)=>{ state.reserves.lignes[idx].photos.push(src); rebuild(); });
+          const f=e.target.files[0]; if(f) compresserImage(f, (src)=>{ if(src) state.reserves.lignes[idx].photos.push(src); else avertirImageIllisible(1); rebuild(); });
           inCam.value='';
         });
         btnCam.innerHTML = icon('camera',15); btnCam.append(inCam);
@@ -1074,7 +1112,7 @@ function renderReservesSection(){
         inGal.addEventListener('change',(e)=>{
           const fs=Array.from(e.target.files||[]); if(!fs.length) return;
           let rest=fs.length;
-          fs.forEach(f=> compresserImage(f, (src)=>{ state.reserves.lignes[idx].photos.push(src); if(--rest===0) rebuild(); }));
+          fs.forEach(f=> compresserImage(f, (src)=>{ if(src) state.reserves.lignes[idx].photos.push(src); else avertirImageIllisible(1); if(--rest===0) rebuild(); }));
           inGal.value='';
         });
         btnGal.innerHTML = icon('image',15); btnGal.append(inGal);
@@ -1936,13 +1974,12 @@ async function generatePDF(){
   y += 17;
 
   const colsMob = estSortant() ? [
-    {w:150, t:'Mobilier / accessoire'}, {w:60, t:'QUANTITÉ', isQty:true},
-    {w:48, smiley:true, k:0}, {w:48, smiley:'neutre', k:1}, {w:48, smiley:false, k:2},
-    {w:149, t:'OBSERVATIONS', isObs:true}
+    {w:203, t:'Mobilier / accessoire'}, {w:80, t:'QUANTITÉ', isQty:true},
+    {w:73, smiley:true, k:0}, {w:74, smiley:'neutre', k:1}, {w:73, smiley:false, k:2}
   ] : [
-    {w:118, t:'Mobilier / accessoire'}, {w:52, t:'QUANTITÉ', isQty:true},
-    {w:44, t:'NEUF', k:0}, {w:44, t:'OCCASION', k:1},
-    {w:44, t2:['AVEC','RÉS.'], k:2}, {w:44, t2:['SANS','RÉS.'], k:3}, {w:157, t:'OBSERVATIONS', isObs:true}
+    {w:175, t:'Mobilier / accessoire'}, {w:80, t:'QUANTITÉ', isQty:true},
+    {w:62, t:'NEUF', k:0}, {w:62, t:'OCCASION', k:1},
+    {w:62, t2:['AVEC','RÉSERVE'], k:2}, {w:62, t2:['SANS','RÉSERVE'], k:3}
   ];
   const mobKeys = estSortant() ? ['ok','neutre','nok'] : ['neuf','occasion','avec_reserve','sans_reserve'];
   const mobRows = MOBILIER_ITEMS.filter(i=> mobilierActif(i)).map(i=>{
@@ -2224,9 +2261,13 @@ async function generatePDF(){
   if(afficherCasse){
     resNormalise(state.casse.lignes).forEach((l, i)=>{
       const txt = resTexte(l).trim();
-      resPhotos(l).forEach(p=> annex.push({ label:'Casse '+(i+1), src:p, obs:txt, reserve:true }));
+      resPhotos(l).forEach(p=> annex.push({ label:'', src:p, obs:txt, reserve:true }));
     });
-    (state.casse.photos || []).forEach(p=> annex.push({label:'Casse / dommages', src:p, obs:'', reserve:true}));
+    (state.casse.photos || []).forEach(p=> annex.push({label:'', src:p, obs:'', reserve:true}));
+  }
+  // Ne garder que les images réellement affichables (JPEG / PNG en base64)
+  for(let k = annex.length - 1; k >= 0; k--){
+    if(!/^data:image\/(jpe?g|png);base64,/i.test(String(annex[k].src || ''))) annex.splice(k, 1);
   }
   if(annex.length){
     y = newPage();

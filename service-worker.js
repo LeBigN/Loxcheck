@@ -1,4 +1,4 @@
-const CACHE_NAME = 'loxcheck-v82';
+const CACHE_NAME = 'loxcheck-v83';
 const ASSETS = [
   './',
   './index.html',
@@ -48,7 +48,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Cache-first ; les fichiers du même site récupérés plus tard (ex. convertisseur HEIC chargé à la demande)
+  // sont mémorisés pour fonctionner aussi hors ligne.
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req))
+    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+      try {
+        if (res && res.ok && req.method === 'GET' && new URL(req.url).origin === self.location.origin) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+        }
+      } catch (e) {}
+      return res;
+    }))
   );
 });
